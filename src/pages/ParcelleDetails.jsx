@@ -1,0 +1,378 @@
+import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '../lib/supabase'
+import { db } from '../lib/db'
+import ZoneForm from '../components/ZoneForm'
+import { 
+  ArrowLeft, 
+  Trash2, 
+  Map as MapIcon, 
+  Sprout,
+  Maximize2,
+  CheckCircle2,
+  Clock,
+  Layers,
+  PlusCircle,
+  XCircle,
+  AlertCircle
+} from 'lucide-react'
+
+export default function ParcelleDetails({
+  parcelle,
+  goBack,
+  setStep,
+  setSelectedZone,
+}) {
+  const [zones, setZones] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [isSyncing, setIsSyncing] = useState(false)
+
+  // --- LOGIQUE D'AFFICHAGE DES ICONES SVG ---
+  const getCropStyle = (cultureNom) => {
+    if (!cultureNom) return { icon: '/assets/cultures/default.svg', color: 'bg-emerald-50' };
+    
+    const nom = cultureNom.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    
+    const mapping = {
+      'mil': 'mil.svg', 'riz': 'riz.svg', 'mais': 'mais.svg', 'sorgho': 'sorgho.svg', 'fonio': 'fonio.svg', 'ble': 'ble.svg', 'orge': 'orge.svg',
+      'arachide': 'arachide.svg', 'niebe': 'niebe.svg', 'pois d\'angole': 'pois-angole.svg', 'soja': 'soja.svg', 'pois bambara': 'pois-bambara.svg',
+      'manioc': 'manioc.svg', 'patate douce': 'patate-douce.svg', 'igname': 'igname.svg',
+      'oignon': 'oignon.svg', 'tomate': 'tomate.svg', 'gombo': 'gombo.svg', 'chou': 'chou.svg', 'laitue': 'laitue.svg', 'pasteque': 'pasteque.svg',
+      'mangue': 'mangue.svg', 'banane': 'banane.svg', 'papaye': 'papaye.svg', 'fraise': 'fraise.svg', 'ananas': 'ananas.svg', 'avocat': 'avocat.svg', 'goyave': 'goyave.svg', 'citron': 'citron.svg',
+      'coton': 'coton.svg', 'anacardier': 'anacardier.svg', 'canne a sucre': 'canne-sucre.svg', 'sesame': 'sesame.svg', 'curcuma': 'curcuma.svg', 'bissap': 'bissap.svg', 'gingembre': 'gingembre.svg',
+      'brachiaria': 'brachiaria.svg', 'panicum': 'panicum.svg', 'neem': 'neem.svg', 'moringa': 'moringa.svg'
+    };
+
+    const fileName = Object.keys(mapping).find(k => nom.includes(k));
+    const iconPath = fileName ? `/assets/cultures/${mapping[fileName]}` : '/assets/cultures/default.svg';
+
+    return { 
+      icon: iconPath, 
+      color: 'bg-white' 
+    };
+  }
+
+  // ================= LOGIQUE CHARGEMENT =================
+  const loadZones = useCallback(async () => {
+    if (!parcelle?.id) return
+    setLoading(true)
+    try {
+      const localZones = await db.zones.where('parcelle_id').equals(parcelle.id).toArray()
+      
+      const enrichWithCulture = async (zonesList) => {
+        return await Promise.all(zonesList.map(async (z) => {
+          const zc = await db.zone_cultures.where('zone_id').equals(z.id).first();
+          if (zc) {
+             const cult = await db.cultures.get(zc.culture_id);
+             return { ...z, culture_nom: cult?.nom };
+          }
+          return z;
+        }));
+      };
+
+      const localEnriched = await enrichWithCulture(localZones);
+      setZones(localEnriched.sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+
+      if (navigator.onLine) {
+        setIsSyncing(true)
+        const { data: remoteData, error } = await supabase
+          .from('zones')
+          .select(`*, zone_cultures ( cultures ( nom ) )`)
+          .eq('parcelle_id', parcelle.id)
+
+        if (!error && remoteData) {
+          const formattedRemote = remoteData.map(z => ({
+            ...z,
+            synced: 1,
+            culture_nom: z.zone_cultures?.[0]?.cultures?.nom 
+          }));
+
+          await db.zones.bulkPut(formattedRemote.map(({zone_cultures, ...rest}) => ({...rest, synced: 1})));
+          
+          const finalMap = new Map();
+          formattedRemote.forEach(z => finalMap.set(z.id, z));
+          localZones.forEach(lz => { if (lz.synced === 0) finalMap.set(lz.id, lz) });
+          
+          setZones(Array.from(finalMap.values()).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
+        }
+        setIsSyncing(false)
+      }
+    } catch (err) { 
+      console.error("Erreur chargement zones:", err) 
+    } finally { 
+      setLoading(false) 
+    }
+  }, [parcelle?.id])
+
+  useEffect(() => {
+    loadZones()
+  }, [loadZones])
+
+  const updateZoneStatus = async (e, zoneId, newStatus) => {
+    e.stopPropagation(); 
+    await db.zones.update(zoneId, { statut: newStatus, synced: 0 });
+    setZones(prev => prev.map(z => z.id === zoneId ? { ...z, statut: newStatus, synced: 0 } : z));
+    
+    if (navigator.onLine) {
+      const { error } = await supabase.from('zones').update({ statut: newStatus }).eq('id', zoneId);
+      if (!error) {
+        await db.zones.update(zoneId, { synced: 1 });
+        setZones(prev => prev.map(z => z.id === zoneId ? { ...z, statut: newStatus, synced: 1 } : z));
+      }
+    }
+  };
+
+  const addZone = async ({ nom, surface }) => {
+    const id = crypto.randomUUID()
+    const newZone = { 
+      id, 
+      parcelle_id: parcelle.id, 
+      user_id: parcelle.user_id, 
+      nom, 
+      surface: Number(surface), 
+      statut: 'en_cours', 
+      created_at: new Date().toISOString(), 
+      synced: 0 
+    }
+    await db.zones.add(newZone)
+    setZones(prev => [...prev, newZone].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)))
+    
+    if (navigator.onLine) {
+      const { synced, culture_nom, ...dataToSend } = newZone
+      const { error } = await supabase.from('zones').insert([dataToSend])
+      if (!error) {
+        await db.zones.update(id, { synced: 1 })
+        setZones(prev => prev.map(z => z.id === id ? { ...z, synced: 1 } : z))
+      }
+    }
+  }
+
+  const deleteZone = async (e, id) => {
+    e.stopPropagation(); 
+    if (!confirm('Supprimer cette zone définitivement ?')) return
+    
+    try {
+      await db.zones.delete(id);
+      setZones(prev => prev.filter(z => z.id !== id));
+      
+      if (navigator.onLine) {
+        await supabase.from('zones').delete().eq('id', id);
+      }
+    } catch (err) {
+      console.error("Erreur lors de la suppression:", err)
+    }
+  }
+
+  const surfaceUtilisee = zones.reduce((total, z) => total + Number(z.surface), 0)
+  const surfaceRestante = Math.max(0, Number(parcelle.surface) - surfaceUtilisee)
+  const isFull = surfaceRestante < 0.01
+
+  return (
+    <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26]">
+      <div className="fixed inset-0 opacity-[0.03] pointer-events-none" 
+           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")` }} />
+
+      <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
+        
+        {/* HEADER */}
+        <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl shadow-emerald-900/20">
+          <button onClick={goBack} className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20">
+            <ArrowLeft size={20} />
+          </button>
+          
+          <div className="relative z-10 text-center space-y-2 pt-4">
+            <div className="flex justify-center items-center gap-2">
+              <div className="h-1 w-6 bg-amber-400 rounded-full" />
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">Géométrie du Domaine</span>
+              <div className="h-1 w-6 bg-amber-400 rounded-full" />
+            </div>
+            <h1 className="text-3xl font-serif font-medium leading-tight px-4 truncate">{parcelle.nom}</h1>
+            <div className="flex items-center justify-center gap-2">
+                <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
+                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">
+                  {isSyncing ? 'Synchronisation Cloud...' : 'Système à jour'}
+                </p>
+            </div>
+          </div>
+          <MapIcon className="absolute right-[-10px] bottom-[-10px] text-white/5 w-32 h-32 rotate-12" />
+        </header>
+
+        {/* STATS */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-emerald-700 p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group">
+              <div className="relative z-10">
+                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Surface Totale</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-4xl font-black tracking-tighter">{parcelle.surface}</span>
+                  <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
+                </div>
+              </div>
+              <Maximize2 className="absolute -right-4 -bottom-4 opacity-10 size-24" />
+          </div>
+          
+          <div className={`p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group transition-all duration-500 ${isFull ? 'bg-red-800' : 'bg-orange-600'}`}>
+              <div className="relative z-10">
+                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Disponible</p>
+                <div className="flex items-baseline gap-1 mt-1">
+                  <span className="text-4xl font-black tracking-tighter">{surfaceRestante.toFixed(1)}</span>
+                  <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
+                </div>
+              </div>
+              <Sprout className="absolute -right-4 -bottom-4 opacity-10 size-24" />
+          </div>
+        </div>
+
+        {/* AJOUT ZONE */}
+        <section className="relative">
+          <div className="bg-white p-8 rounded-[3rem] border border-[#E8E2D9] shadow-sm relative overflow-hidden">
+            <div className="flex items-center gap-4 mb-8">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner transition-all duration-500 ${isFull ? 'bg-red-50 text-red-800 scale-110' : 'bg-orange-50 text-orange-600'}`}>
+                {isFull ? <AlertCircle size={24} /> : <PlusCircle size={24} />}
+              </div>
+              <div>
+                <h3 className={`text-xl font-serif font-bold transition-colors ${isFull ? 'text-red-900' : 'text-[#0A261D]'}`}>
+                  {isFull ? 'Capacité Limitée' : 'Ajouter une zone'}
+                </h3>
+              </div>
+            </div>
+            
+            {isFull ? (
+              <div className="relative z-10 bg-gradient-to-br from-red-50 to-white border-2 border-dashed border-red-200 p-8 rounded-[2rem] flex flex-col items-center text-center">
+                <div className="w-16 h-16 bg-red-800 rounded-full flex items-center justify-center text-white mb-4 shadow-lg ring-4 ring-red-50">
+                   <XCircle size={28} className="animate-pulse" />
+                </div>
+                <h4 className="text-red-900 font-black text-lg uppercase">Surface saturée</h4>
+                <p className="text-red-800/60 text-xs mt-1">Espace entièrement alloué.</p>
+              </div>
+            ) : (
+              <div className="relative z-10 bg-[#FDFCF9] p-6 rounded-[2rem] border border-dashed border-orange-200">
+                <ZoneForm surfaceParcelle={parcelle.surface} surfaceUtilisee={surfaceUtilisee} onAdd={addZone} />
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* LISTE DES ZONES */}
+        <section className="space-y-6">
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-emerald-600 rounded-full" />
+              <h3 className="text-xl font-serif font-bold text-[#0A261D]">Secteurs Actifs</h3>
+            </div>
+            <span className="text-[10px] font-black text-slate-500 bg-white border border-[#E8E2D9] px-4 py-1.5 rounded-full shadow-sm uppercase tracking-widest">
+              {zones.length} Zones
+            </span>
+          </div>
+
+          <div className="space-y-4">
+            {zones.length === 0 ? (
+              <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
+                <Layers className="text-emerald-100 mb-4" size={48} />
+                <p className="text-sm font-medium text-slate-400 italic">Aucune délimitation enregistrée.</p>
+              </div>
+            ) : (
+              zones.map(zone => {
+                const style = getCropStyle(zone.culture_nom);
+                return (
+                  <div
+                    key={zone.id}
+                    onClick={() => { setSelectedZone(zone); setStep('zone-details'); }}
+                    className="group bg-white rounded-[2.5rem] border border-[#E8E2D9] hover:border-orange-200 hover:shadow-xl transition-all duration-300 relative overflow-hidden cursor-pointer"
+                  >
+                    <div className="p-5 flex flex-col gap-4">
+                      <div className="flex items-center gap-4">
+                        {/* Avatar Culture */}
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-50 transition-transform group-hover:scale-110 duration-500 ${style.color}`}>
+                          <img 
+                            src={style.icon} 
+                            alt={zone.culture_nom || 'Culture'} 
+                            className="w-full h-full object-contain"
+                            onError={(e) => { e.target.src = '/assets/cultures/default.svg' }}
+                          />
+                        </div>
+
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <h4 className={`font-bold text-lg leading-tight truncate ${zone.statut === 'annulee' ? 'line-through text-slate-400' : 'text-[#1A2E26]'}`}>
+                              {zone.nom}
+                            </h4>
+                            {zone.synced === 0 && <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-2 mt-2">
+                             {/* Badge Surface */}
+                             <div className="flex items-center gap-1 text-[9px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg uppercase">
+                                <Maximize2 size={10} />
+                                {zone.surface} HA
+                             </div>
+
+                             {/* Badge Culture Style Amélioré */}
+                             {zone.culture_nom ? (
+                               <div className="flex items-center gap-1.5 text-[9px] font-black text-orange-700 bg-orange-50/80 border border-orange-100 px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-sm">
+                                 <Sprout size={10} className="text-orange-500" />
+                                 {zone.culture_nom}
+                               </div>
+                             ) : (
+                               <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg uppercase italic border border-slate-100">
+                                 <AlertCircle size={10} />
+                                 En attente
+                               </div>
+                             )}
+                          </div>
+                        </div>
+
+                      
+                      </div>
+
+                      {/* Statuts */}
+                      <div className="flex items-center gap-2 pt-2 border-t border-slate-50" onClick={e => e.stopPropagation()}>
+                        <StatusBtn 
+                          active={zone.statut === 'en_cours'} 
+                          onClick={(e) => updateZoneStatus(e, zone.id, 'en_cours')}
+                          color="orange"
+                          icon={<Clock size={14} />}
+                          label="Culture"
+                        />
+                        <StatusBtn 
+                          active={zone.statut === 'terminee'} 
+                          onClick={(e) => updateZoneStatus(e, zone.id, 'terminee')}
+                          color="emerald"
+                          icon={<CheckCircle2 size={14} />}
+                          label="Récolté"
+                        />
+                        <StatusBtn 
+                          active={zone.statut === 'annulee'} 
+                          onClick={(e) => updateZoneStatus(e, zone.id, 'annulee')}
+                          color="red"
+                          icon={<XCircle size={14} />}
+                          label="Repos"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
+        </section>
+      </div>
+    </div>
+  )
+}
+
+function StatusBtn({ active, onClick, color, icon, label }) {
+  const colors = {
+    orange: active ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-orange-50 hover:text-orange-600',
+    emerald: active ? 'bg-emerald-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-emerald-50 hover:text-emerald-600',
+    red: active ? 'bg-red-800 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-red-50 hover:text-red-800',
+  }
+
+  return (
+    <button
+      onClick={onClick}
+      className={`flex-1 py-3 rounded-2xl text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all active:scale-95 border border-transparent ${active ? 'border-white/20' : 'border-slate-100'} ${colors[color]}`}
+    >
+      {icon}
+      {label}
+    </button>
+  )
+}

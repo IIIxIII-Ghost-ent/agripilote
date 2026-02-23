@@ -1,0 +1,55 @@
+@import "tailwindcss";
+
+@theme {
+  /* Couleurs AgriPilote corrigées */
+  --color-primary: #2d5a27;      /* Vert forêt */
+  --color-secondary: #c65d3b;    /* Terre cuite */
+  --color-accent: #eab308;       /* Or soleil */
+  --color-background: #fdfbf7;   /* Crème */
+  --color-card: #ffffff;         /* Blanc pur */
+  --color-muted: #f1f5f9;        /* Gris doux */
+  --color-border: #e2e8f0;       /* Bordure légère */
+}
+
+@utility gradient-hero {
+  background: linear-gradient(135deg, #2D5A27, #4A7C43);
+}
+
+@layer components {
+  .agri-card {
+    background-color: var(--color-card);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+  }
+  
+  .agri-card-interactive {
+    background-color: var(--color-card);
+    border-radius: 1rem;
+    padding: 1.25rem;
+    border: 1px solid var(--color-border);
+    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+
+  .agri-card-interactive:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+  }
+
+  .agri-input {
+    width: 100%;
+    padding: 0.875rem 1rem;
+    border-radius: 0.75rem;
+    border: 2px solid var(--color-border);
+    background-color: var(--color-background);
+    outline: none;
+    transition: all 0.2s;
+  }
+
+  .agri-input:focus {
+    border-color: var(--color-primary);
+  }
+}
