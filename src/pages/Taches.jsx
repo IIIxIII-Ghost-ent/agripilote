@@ -13,7 +13,10 @@ import {
   History,
   Lock,
   CalendarDays,
-  ChevronRight
+  ChevronRight,
+  HelpCircle,
+  X,
+  Info
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
@@ -21,6 +24,7 @@ import { db } from '../lib/db'
 export default function Taches({ user, setStep }) {
   const [taches, setTaches] = useState([])
   const [filter, setFilter] = useState('todo')
+  const [showGuide, setShowGuide] = useState(false)
 
   // PERSISTANCE & NAVIGATION
   useEffect(() => {
@@ -123,13 +127,30 @@ export default function Taches({ user, setStep }) {
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
-        <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl">
-          <button 
+        <div className="flex justify-between items-center px-2">
+           <button 
             onClick={() => setStep('dashboard')}
-            className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20"
+            className="w-10 h-10 rounded-2xl bg-white border border-[#E8E2D9] flex items-center justify-center text-[#1A2E26] active:scale-90 transition-all shadow-sm"
           >
             <ArrowLeft size={20} />
           </button>
+          <button 
+            onClick={() => setShowGuide(!showGuide)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+          >
+            {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+            <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+          </button>
+        </div>
+
+        <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+              <Calendar className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Journal de Bord</p>
+              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Suivez l'état de synchronisation et l'avancement global de vos travaux.</p>
+            </div>
+          )}
           <div className="relative z-10 text-center space-y-2 pt-4">
             <div className="flex justify-center items-center gap-2">
               <div className="h-1 w-6 bg-amber-400 rounded-full" />
@@ -146,25 +167,38 @@ export default function Taches({ user, setStep }) {
         </header>
 
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-emerald-600 p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group">
-              <div className="relative z-10">
-                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Aujourd'hui</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-4xl font-black tracking-tighter">{summary.today}</span>
-                  <span className="text-[10px] font-bold opacity-60 uppercase">Jobs</span>
-                </div>
+          <div className="relative overflow-hidden bg-emerald-600 p-6 rounded-[2.5rem] text-white shadow-lg group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+                <Clock className="text-white mb-1" size={20} />
+                <p className="text-[10px] text-white font-bold leading-tight">Tâches prévues pour aujourd'hui.</p>
               </div>
-              <Clock className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-700" size={100} />
+            )}
+            <div className="relative z-10">
+              <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Aujourd'hui</p>
+              <div className="flex items-baseline gap-1 mt-1">
+                <span className="text-4xl font-black tracking-tighter">{summary.today}</span>
+                <span className="text-[10px] font-bold opacity-60 uppercase">Jobs</span>
+              </div>
+            </div>
+            <Clock className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-700" size={100} />
           </div>
-          <div className="bg-orange-600 p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group">
-              <div className="relative z-10">
-                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">En Retard</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-4xl font-black tracking-tighter">{summary.late}</span>
-                  <span className="text-[10px] font-bold opacity-60 uppercase">Urgent</span>
-                </div>
+
+          <div className="relative overflow-hidden bg-orange-600 p-6 rounded-[2.5rem] text-white shadow-lg group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+                <AlertTriangle className="text-white mb-1" size={20} />
+                <p className="text-[10px] text-white font-bold leading-tight">Travaux en retard à prioriser d'urgence.</p>
               </div>
-              <AlertTriangle className="absolute -right-4 -bottom-4 opacity-10 group-hover:rotate-12 transition-transform duration-700" size={100} />
+            )}
+            <div className="relative z-10">
+              <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">En Retard</p>
+              <div className="flex items-baseline gap-1 mt-1">
+                <span className="text-4xl font-black tracking-tighter">{summary.late}</span>
+                <span className="text-[10px] font-bold opacity-60 uppercase">Urgent</span>
+              </div>
+            </div>
+            <AlertTriangle className="absolute -right-4 -bottom-4 opacity-10 group-hover:rotate-12 transition-transform duration-700" size={100} />
           </div>
         </div>
 
@@ -173,7 +207,14 @@ export default function Taches({ user, setStep }) {
           <FilterButton active={filter === 'done'} onClick={() => setFilter('done')} label="Terminées" icon={<History size={16}/>} />
         </div>
 
-        <section className="space-y-4">
+        <section className="space-y-4 relative">
+          {showGuide && filtered.length > 0 && (
+            <div className="absolute inset-x-0 -top-2 z-20 bg-amber-500/95 backdrop-blur-md rounded-[2rem] p-4 flex items-center gap-4 text-white animate-in slide-in-from-top-4 duration-300 border border-white/20 shadow-lg">
+              <Info size={24} className="shrink-0" />
+              <p className="text-[11px] font-bold leading-snug">Cliquez sur le cercle à gauche pour valider une tâche. Les tâches à venir sont verrouillées.</p>
+            </div>
+          )}
+          
           {filtered.length === 0 ? (
             <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
               <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-300 mb-4 shadow-inner">

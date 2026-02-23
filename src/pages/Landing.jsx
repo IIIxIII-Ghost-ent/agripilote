@@ -3,39 +3,37 @@ import { useEffect, useState } from "react";
 import { 
   MapPin, Calendar, Camera, Users, 
   ShoppingBag, Wallet, CloudSun, Bell,
-  ArrowRight, Sprout, Leaf, ChevronRight
+  ArrowRight, Sprout, Leaf, ChevronRight,
+  Menu, X, Share, PlusSquare, Store, Monitor, Smartphone
 } from "lucide-react";
 
 export default function Landing() {
- const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-useEffect(() => {
-  const handler = (e) => {
-    e.preventDefault();
-    console.log("PWA install disponible");
-    setDeferredPrompt(e);
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener("beforeinstallprompt", handler);
+    return () => window.removeEventListener("beforeinstallprompt", handler);
+  }, []);
+
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      setDeferredPrompt(null);
+    } else {
+      alert("Sur PC : cliquez sur l'icône d'installation dans la barre d'adresse ou dans le menu du navigateur.");
+    }
   };
 
-  window.addEventListener("beforeinstallprompt", handler);
-
-  return () => {
-    window.removeEventListener("beforeinstallprompt", handler);
-  };
-}, []);
-
-const handleInstall = async () => {
-  if (deferredPrompt) {
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-  } else {
-    alert("Sur PC : cliquez sur les 3 points du navigateur puis 'Installer AgriPilote'.");
-  }
-};
   return (
-    <div className="min-h-screen bg-[#FDFCF9] text-[#1A2E26] font-sans selection:bg-amber-200">
+    <div className="min-h-screen bg-[#FDFCF9] text-[#1A2E26] font-sans selection:bg-amber-200 overflow-x-hidden">
       
-      {/* NOUVEAU MOTIF DE FOND (Points subtils) */}
+      {/* MOTIF DE FOND */}
       <div 
         className="fixed inset-0 opacity-[0.1] pointer-events-none" 
         style={{ 
@@ -43,56 +41,72 @@ const handleInstall = async () => {
         }}
       />
 
-      {/* 1. Header (Navbar Premium) */}
-      <header className="flex justify-between items-center px-6 md:px-12 py-6 bg-[#FDFCF9]/70 backdrop-blur-md sticky top-0 z-[100] border-b border-[#E8E2D9]">
-        <div className="flex items-center gap-3 group cursor-pointer">
-         <div className="bg-[#1A2E26] p-2 rounded-2xl shadow-lg shadow-emerald-900/20 group-hover:rotate-12 transition-transform overflow-hidden flex items-center justify-center w-12 h-12">
-  <img 
-    src="/assets/logo2.png" 
-    alt="Logo AgriPilote" 
-    className="w-full h-full object-contain"
-  />
-</div>
-          <h1 className="text-2xl font-serif font-bold tracking-tighter">Agri<span className="text-emerald-700 italic">Pilote</span></h1>
+      {/* 1. Header (Menu Burger Optimisé) */}
+      <header className="flex justify-between items-center px-6 md:px-12 py-6 bg-[#FDFCF9]/90 backdrop-blur-xl sticky top-0 z-[100] border-b border-[#E8E2D9]">
+        <div className="flex items-center gap-3 group cursor-pointer relative z-[110]">
+          <div className="bg-[#1A2E26] p-2 rounded-2xl shadow-lg group-hover:rotate-12 transition-transform w-10 h-10 md:w-12 md:h-12 flex items-center justify-center overflow-hidden">
+            <img src="/assets/logo2.png" alt="Logo" className="w-full h-full object-contain" />
+          </div>
+          <h1 className="text-xl md:text-2xl font-serif font-bold tracking-tighter">Agri<span className="text-emerald-700 italic">Pilote</span></h1>
         </div>
         
         <nav className="hidden lg:flex gap-10 text-[10px] font-black uppercase tracking-[0.2em] text-[#1A2E26]">
-          <a href="#" className="hover:opacity-60 transition-opacity">Accueil</a>
-          <Link to="/marketplace" className="hover:opacity-60 transition-opacity">Marché</Link>
-          <a href="#" className="hover:opacity-60 transition-opacity">Partenaires</a>
-          <a href="#" className="hover:opacity-60 transition-opacity">À Propos</a>
+          <a href="#" className="hover:text-emerald-700 transition-colors">Accueil</a>
+          <Link to="/marketplace" className="hover:text-emerald-700 transition-colors">Marché</Link>
+          <a href="#" className="hover:text-emerald-700 transition-colors">Partenaires</a>
+          <a href="#" className="hover:text-emerald-700 transition-colors">À Propos</a>
         </nav>
 
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 relative z-[110]">
           <Link 
             to="/app" 
-            className="bg-[#1A2E26] text-white px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-900 transition-all shadow-xl shadow-emerald-900/20 active:scale-95"
+            className="hidden sm:block bg-[#1A2E26] text-white px-6 py-3 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-emerald-900 transition-all shadow-xl shadow-emerald-900/20 active:scale-95"
           >
             Ouvrir l'App
           </Link>
+          
+          <button 
+            onClick={() => setIsMenuOpen(!isMenuOpen)}
+            className="lg:hidden p-3 bg-[#1A2E26] rounded-xl text-white shadow-lg active:scale-90 transition-transform"
+          >
+            {isMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
+
+        {/* Mobile Menu Overlay - Fond Solide et Clair */}
+        <div className={`fixed inset-0 bg-[#FDFCF9] z-[105] flex flex-col transition-all duration-500 lg:hidden ${isMenuOpen ? 'translate-y-0 opacity-100 visible' : '-translate-y-full opacity-0 invisible'}`}>
+            <nav className="flex-grow flex flex-col items-center justify-center gap-8 text-2xl font-serif font-bold italic">
+                <a href="#" onClick={() => setIsMenuOpen(false)} className="hover:text-emerald-700">Accueil</a>
+                <Link to="/marketplace" onClick={() => setIsMenuOpen(false)} className="hover:text-emerald-700">Le Marché</Link>
+                <a href="#" onClick={() => setIsMenuOpen(false)} className="hover:text-emerald-700">Partenaires</a>
+                
+                <div className="w-12 h-1 bg-emerald-100 rounded-full my-4"></div>
+                
+                <Link to="/app" onClick={() => setIsMenuOpen(false)} className="bg-[#1A2E26] text-white px-10 py-5 rounded-[2rem] text-xs font-black uppercase not-italic tracking-[0.3em]">
+                  Lancer l'App
+                </Link>
+            </nav>
         </div>
       </header>
 
       {/* 2. Hero Section */}
-      <section className="relative min-h-[90vh] flex flex-col justify-center items-center text-center px-6 py-20 overflow-hidden">
-        {/* Background Image Haute Visibilité */}
+      <section className="relative min-h-[90vh] flex flex-col justify-center items-center text-center px-6 py-12 overflow-hidden">
         <div className="absolute inset-0 z-0">
           <img 
             src="https://images.unsplash.com/photo-1500382017468-9049fed747ef?ixlib=rb-4.0.3&auto=format&fit=crop&w=2000&q=80" 
-            className="w-full h-full object-cover opacity-[0.50]" 
+            className="w-full h-full object-cover opacity-[0.40]" 
             alt="Nature"
           />
-          {/* Overlay ajusté : Moins de blanc en haut pour voir l'image */}
           <div className="absolute inset-0 bg-gradient-to-b from-[#FDFCF9]/30 via-transparent to-[#FDFCF9]"></div>
         </div>
 
         <div className="relative z-10 max-w-5xl space-y-8">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 backdrop-blur-sm border border-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-[0.2em] animate-fade-in shadow-sm">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 backdrop-blur-sm border border-emerald-100 text-emerald-700 text-[10px] font-black uppercase tracking-[0.2em] shadow-sm">
             <Leaf size={14} className="animate-pulse" />
             L'agriculture au Sénégal
           </div>
 
-          <h2 className="text-6xl md:text-8xl font-serif font-medium leading-[0.9] tracking-tighter drop-shadow-sm">
+          <h2 className="text-5xl md:text-8xl font-serif font-medium leading-[1] tracking-tighter">
             Cultivez <span className="text-emerald-800 italic">l'excellence</span> <br /> 
             <span className="relative">
               de vos terres
@@ -102,98 +116,107 @@ const handleInstall = async () => {
             </span>
           </h2>
 
-          <p className="text-lg md:text-xl text-[#1A2E26] max-w-2xl mx-auto leading-relaxed font-bold drop-shadow-md">
+          <p className="text-lg md:text-xl text-[#1A2E26] max-w-2xl mx-auto leading-relaxed font-bold drop-shadow-sm">
             AgriPilote fusionne tradition et technologie pour digitaliser votre exploitation. 
-            Précision, rentabilité et communauté au creux de votre main.
           </p>
 
-          <div className="flex flex-col sm:flex-row gap-6 justify-center pt-8">
+          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-8">
             <Link 
               to="/app" 
-              className="group bg-[#1A2E26] text-white px-10 py-6 rounded-[2.5rem] font-black uppercase tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all shadow-2xl shadow-emerald-900/40"
+              className="group bg-[#1A2E26] text-white px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all shadow-2xl shadow-emerald-900/40"
             >
-              Lancer mon exploitation
+              Démarrer
               <div className="bg-amber-500 p-2 rounded-full text-[#1A2E26] group-hover:rotate-45 transition-transform">
                 <ArrowRight size={20} />
               </div>
             </Link>
-           <button
-  onClick={handleInstall}
-  className="bg-white/90 backdrop-blur-sm border-2 border-[#E8E2D9] text-[#1A2E26] px-10 py-6 rounded-[2.5rem] font-black uppercase tracking-widest hover:bg-white transition shadow-sm flex items-center justify-center gap-2"
->
-  Installer l'application
-</button>
+            
+            <Link 
+              to="/marketplace" 
+              className="group bg-emerald-700 text-white px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest flex items-center justify-center gap-4 hover:scale-105 transition-all shadow-2xl shadow-emerald-900/20"
+            >
+              <Store size={22} className="text-emerald-200" />
+              Le Marché
+            </Link>
+
+            <button
+              onClick={handleInstall}
+              className="bg-white/90 backdrop-blur-sm border-2 border-[#E8E2D9] text-[#1A2E26] px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest hover:bg-white transition flex items-center justify-center gap-3 shadow-sm active:scale-95"
+            >
+              <div className="flex items-center gap-1.5 opacity-80">
+                <Monitor size={18} />
+                <Smartphone size={18} />
+              </div>
+              Installer
+            </button>
           </div>
         </div>
       </section>
 
-      {/* 3. Les Services (Grid Premium) */}
-      <section className="relative z-10 max-w-7xl mx-auto px-6 py-32">
+      {/* SECTION IPHONE Améliorée (Nouveau Design) */}
+      <section className="max-w-4xl mx-auto px-6 mb-20">
+        <div className="bg-white rounded-[2.5rem] p-2 border border-[#E8E2D9] shadow-xl overflow-hidden">
+            <div className="bg-amber-50/40 rounded-[2.3rem] p-8 md:p-10 flex flex-col md:flex-row items-center gap-10">
+                <div className="relative flex-shrink-0">
+                    <div className="bg-white w-24 h-24 rounded-3xl shadow-2xl flex items-center justify-center text-blue-500 border border-amber-100">
+                        <Share size={40} className="animate-bounce" />
+                    </div>
+                    <div className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-2.5 rounded-xl shadow-lg border-2 border-white">
+                        <PlusSquare size={24} />
+                    </div>
+                </div>
+                
+                <div className="flex-grow space-y-6">
+                    <div>
+                        <h4 className="font-serif text-3xl font-bold italic mb-2 text-[#1A2E26]">Sur iPhone ?</h4>
+                        <p className="text-slate-600 font-bold text-sm">Suivez ces deux étapes rapides pour installer l'application :</p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="flex items-start gap-4 bg-white/60 p-4 rounded-2xl border border-white">
+                            <span className="flex-shrink-0 w-8 h-8 bg-amber-200 text-amber-900 rounded-full flex items-center justify-center font-black text-xs">1</span>
+                            <p className="text-xs font-black uppercase tracking-wider text-slate-700 leading-relaxed">
+                                Cliquez sur <span className="inline-flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md"><Share size={12}/> Partager</span> dans Safari
+                            </p>
+                        </div>
+                        <div className="flex items-start gap-4 bg-white/60 p-4 rounded-2xl border border-white">
+                            <span className="flex-shrink-0 w-8 h-8 bg-emerald-200 text-emerald-900 rounded-full flex items-center justify-center font-black text-xs">2</span>
+                            <p className="text-xs font-black uppercase tracking-wider text-slate-700 leading-relaxed">
+                                Sélectionnez <span className="inline-flex items-center gap-1 text-white bg-[#1A2E26] px-2 py-0.5 rounded-md"><PlusSquare size={12}/> Sur l'écran d'accueil</span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+      </section>
+
+      {/* 3. Les Services */}
+      <section className="relative z-10 max-w-7xl mx-auto px-6 py-20">
         <div className="flex flex-col md:flex-row md:items-end justify-between mb-20 gap-8">
           <div className="max-w-xl">
-            <h3 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.4em] mb-4 text-center md:text-left">Écosystème</h3>
-            <h4 className="text-4xl md:text-5xl font-serif font-medium leading-tight text-center md:text-left">
+            <h3 className="text-[10px] font-black text-amber-600 uppercase tracking-[0.4em] mb-4">Écosystème</h3>
+            <h4 className="text-4xl md:text-5xl font-serif font-medium leading-tight">
               Une intelligence <br /> dédiée à vos récoltes
             </h4>
           </div>
-          <p className="text-slate-800 font-bold max-w-xs text-center md:text-left">
-            Huit modules experts conçus pour répondre aux réalités climatiques et économiques locales.
+          <p className="text-slate-800 font-bold max-w-xs">
+            Huit modules experts conçus pour répondre aux réalités locales.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <FeatureCard 
-            icon={<MapPin />} 
-            title="Parcelles" 
-            desc="Cartographie précise et historique cultural."
-            delay="0"
-          />
-          <FeatureCard 
-            icon={<Calendar />} 
-            title="Calendrier" 
-            desc="Planification intelligente de l'arrosage."
-            delay="100"
-          />
-          <FeatureCard 
-            icon={<Camera />} 
-            title="Diagnostic IA" 
-            desc="Détection instantanée des maladies par photo."
-            delay="200"
-          />
-          <FeatureCard 
-            icon={<Users />} 
-            title="Réseau Experts" 
-            desc="Conseils directs via WhatsApp certifié."
-            delay="300"
-          />
-          <FeatureCard 
-            icon={<ShoppingBag />} 
-            title="Le Marché" 
-            desc="Vente directe et achat d'intrants groupés."
-            delay="400"
-          />
-          <FeatureCard 
-            icon={<Wallet />} 
-            title="Rentabilité" 
-            desc="Suivi analytique de vos coûts et profits."
-            delay="500"
-          />
-          <FeatureCard 
-            icon={<CloudSun />} 
-            title="Météo" 
-            desc="Prévisions ultra-locales par satellite."
-            delay="600"
-          />
-          <FeatureCard 
-            icon={<Bell />} 
-            title="Alertes" 
-            desc="Notifications de risques phytosanitaires."
-            delay="700"
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <FeatureCard icon={<MapPin />} title="Parcelles" desc="Cartographie précise et historique cultural." delay="0" />
+          <FeatureCard icon={<Calendar />} title="Calendrier" desc="Planification intelligente de l'arrosage." delay="100" />
+          <FeatureCard icon={<Camera />} title="Diagnostic IA" desc="Détection instantanée des maladies par photo." delay="200" />
+          <FeatureCard icon={<Users />} title="Réseau Experts" desc="Conseils directs via WhatsApp certifié." delay="300" />
+          <FeatureCard icon={<ShoppingBag />} title="Le Marché" desc="Vente directe et achat d'intrants groupés." delay="400" />
+          <FeatureCard icon={<Wallet />} title="Rentabilité" desc="Suivi analytique de vos coûts et profits." delay="500" />
+          <FeatureCard icon={<CloudSun />} title="Météo" desc="Prévisions ultra-locales par satellite." delay="600" />
+          <FeatureCard icon={<Bell />} title="Alertes" desc="Notifications de risques phytosanitaires." delay="700" />
         </div>
       </section>
 
-      {/* Footer simple */}
       <footer className="py-20 border-t border-[#E8E2D9] text-center bg-white/70 backdrop-blur-sm relative z-10">
         <div className="flex justify-center items-center gap-3 opacity-30 mb-8">
             <div className="h-px w-12 bg-[#1A2E26]" />
@@ -201,11 +224,8 @@ const handleInstall = async () => {
             <div className="h-px w-12 bg-[#1A2E26]" />
         </div>
         
-        <p className="text-[10px] font-black text-[#1A2E26] uppercase tracking-[0.5em]">
+        <p className="text-[10px] font-black text-[#1A2E26] uppercase tracking-[0.5em] px-4">
           Sénégal • AgriPilote 2026 • Technologie Rurale
-        </p>
-        <p className="text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.4em]">
-          IIIxIII • V0-2026
         </p>
       </footer>
     </div>
@@ -215,7 +235,7 @@ const handleInstall = async () => {
 function FeatureCard({ icon, title, desc, delay }) {
   return (
     <div 
-      className="group bg-white/80 backdrop-blur-md p-8 rounded-[2.5rem] border border-[#E8E2D9] hover:border-emerald-200 hover:shadow-2xl hover:shadow-emerald-900/10 transition-all duration-500 cursor-pointer flex flex-col h-full"
+      className="group bg-white/80 backdrop-blur-md p-8 rounded-[2.5rem] border border-[#E8E2D9] hover:border-emerald-200 hover:shadow-2xl transition-all duration-500 cursor-pointer flex flex-col h-full"
       style={{ transitionDelay: `${delay}ms` }}
     >
       <div className="bg-[#FDFCF9] w-14 h-14 rounded-2xl flex items-center justify-center mb-8 border border-[#E8E2D9] group-hover:bg-emerald-600 group-hover:text-white group-hover:rotate-[10deg] transition-all duration-500 text-emerald-700">

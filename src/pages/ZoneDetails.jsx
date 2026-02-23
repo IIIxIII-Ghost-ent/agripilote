@@ -5,7 +5,7 @@ import {
   ArrowLeft, Calendar, Sprout, ChevronDown, 
   CheckCircle2, Info, LayoutGrid, Sparkles,
   MapPin, Clock, ShieldCheck, Waves, TrendingUp,
-  AlertCircle
+  AlertCircle, HelpCircle, X, Microscope, TrendingDown
 } from "lucide-react"
 
 export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures, goBack }) {
@@ -15,6 +15,7 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
   const [dateDebut, setDateDebut] = useState(new Date().toISOString().split('T')[0])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
+  const [showGuide, setShowGuide] = useState(false) // Logique du Guide
 
   const categoriesDef = {
     "Céréales": { icon: "🌾", list: ["Mil", "Riz", "Maïs", "Sorgho", "Fonio", "Blé", "Orge"], accent: "amber" },
@@ -29,7 +30,6 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
   const activeCulture = zoneCultures.find(zc => zc.zone_id === zone.id)
   const selectedCultureData = cultures.find(c => c.id === (activeCulture?.culture_id || cultureId))
 
-  // Calcul du progrès simulé (Basé sur 90 jours par défaut pour l'esthétique)
   const progress = useMemo(() => {
     if (!activeCulture) return 0;
     const start = new Date(activeCulture.date_debut);
@@ -98,21 +98,37 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
 
   return (
     <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26] selection:bg-emerald-100">
-      {/* BACKGROUND DISCRET */}
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none" 
            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")` }} />
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
-        {/* HEADER PREMIUM (Identique à Taches.js) */}
+        {/* BOUTON GUIDE (Même logique que Dashboard) */}
+        <div className="flex justify-between items-center px-2">
+            <button 
+              onClick={goBack}
+              className="w-11 h-11 rounded-2xl bg-white border border-[#E8E2D9] flex items-center justify-center text-[#1A2E26] active:scale-90 transition-all"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <button 
+             onClick={() => setShowGuide(!showGuide)}
+             className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+            >
+              {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+              <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+            </button>
+        </div>
+
+        {/* HEADER PREMIUM */}
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-2xl">
-          <button 
-            onClick={goBack}
-            className="absolute top-6 left-6 w-11 h-11 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+              <LayoutGrid className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Identité de Zone</p>
+              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Retrouvez ici les détails techniques et la localisation de votre parcelle.</p>
+            </div>
+          )}
           <div className="relative z-10 text-center space-y-2 pt-4">
             <div className="flex justify-center items-center gap-2">
               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-amber-400 opacity-90">Exploitation</span>
@@ -133,11 +149,16 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
         </header>
 
         {activeCulture ? (
-          /* --- ÉTAT PRODUCTION ACTIVE : DASHBOARD DE ZONE --- */
+          /* --- ÉTAT PRODUCTION ACTIVE --- */
           <div className="space-y-6 animate-in fade-in duration-1000">
-            
-            {/* CARD PRINCIPALE : PROGRESSION */}
             <div className="bg-white rounded-[3rem] p-8 border border-[#E8E2D9] shadow-sm relative overflow-hidden group">
+                {showGuide && (
+                  <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+                    <TrendingUp className="text-emerald-400 mb-2" size={32} />
+                    <p className="text-[10px] font-black uppercase text-emerald-400 mb-1">Suivi de Croissance</p>
+                    <p className="text-xs text-emerald-50 font-medium">Visualisez l'évolution de votre culture en temps réel depuis le semis.</p>
+                  </div>
+                )}
                 <div className="flex justify-between items-start mb-8">
                     <div className="space-y-1">
                         <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Culture actuelle</p>
@@ -152,7 +173,6 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
                     </div>
                 </div>
 
-                {/* Barre de progression stylisée */}
                 <div className="space-y-3">
                     <div className="flex justify-between items-end">
                         <span className="text-[10px] font-black text-emerald-700 uppercase tracking-tighter bg-emerald-50 px-2 py-0.5 rounded-md flex items-center gap-1">
@@ -171,17 +191,27 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
                 </div>
             </div>
 
-            {/* GRID D'INFOS TECHNIQUES */}
             <div className="grid grid-cols-2 gap-4">
-                <div className="bg-[#1A2E26] p-6 rounded-[2.5rem] text-white flex flex-col justify-between h-40 shadow-lg shadow-emerald-950/20 relative overflow-hidden">
+                <div className="bg-[#1A2E26] p-6 rounded-[2.5rem] text-white flex flex-col justify-between h-40 shadow-lg relative overflow-hidden">
+                    {showGuide && (
+                      <div className="absolute inset-0 z-20 bg-amber-500/95 p-4 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                        <p className="text-[9px] font-black uppercase text-white">Chronologie</p>
+                        <p className="text-[10px] text-white leading-tight mt-1">Date exacte où vous avez lancé ce cycle.</p>
+                      </div>
+                    )}
                     <Calendar className="text-amber-400 opacity-50" size={24} />
                     <div>
                         <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">Date de semis</p>
                         <p className="text-lg font-bold">{new Date(activeCulture.date_debut).toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
                     </div>
-                    <div className="absolute -right-4 -top-4 w-20 h-20 bg-white/5 rounded-full blur-xl" />
                 </div>
-                <div className="bg-white p-6 rounded-[2.5rem] border border-[#E8E2D9] flex flex-col justify-between h-40 shadow-sm group hover:border-emerald-300 transition-colors">
+                <div className="bg-white p-6 rounded-[2.5rem] border border-[#E8E2D9] flex flex-col justify-between h-40 shadow-sm relative overflow-hidden group">
+                    {showGuide && (
+                      <div className="absolute inset-0 z-20 bg-emerald-600/95 p-4 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                        <p className="text-[9px] font-black uppercase text-white">État Sanitaire</p>
+                        <p className="text-[10px] text-white leading-tight mt-1">Analyse automatique de la vitalité de vos plants.</p>
+                      </div>
+                    )}
                     <ShieldCheck className="text-emerald-500" size={24} />
                     <div>
                         <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Santé Parcelle</p>
@@ -190,8 +220,13 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
                 </div>
             </div>
 
-            {/* BANDEAU INFO IA */}
-            <div className="bg-amber-50 rounded-[2rem] p-5 border border-amber-100 flex items-center gap-4">
+            <div className="bg-amber-50 rounded-[2rem] p-5 border border-amber-100 flex items-center gap-4 relative overflow-hidden">
+                {showGuide && (
+                  <div className="absolute inset-0 z-20 bg-amber-500/95 p-4 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                    <Sparkles className="text-white mb-1" size={20} />
+                    <p className="text-[10px] text-white font-bold italic">Prédictions intelligentes pour anticiper vos récoltes.</p>
+                  </div>
+                )}
                 <div className="w-10 h-10 bg-white rounded-2xl flex items-center justify-center text-amber-500 shadow-sm shrink-0">
                     <Sparkles size={20} />
                 </div>
@@ -201,18 +236,23 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
             </div>
           </div>
         ) : (
-          /* --- ÉTAT CONFIGURATION : SÉLECTEUR VISUEL --- */
+          /* --- ÉTAT CONFIGURATION --- */
           <div className="space-y-8 animate-in slide-in-from-bottom-6 duration-700">
-            <div className="space-y-1">
+            <div className="space-y-1 relative">
                 <h2 className="text-2xl font-serif font-bold">Lancer une culture</h2>
                 <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest">Étape 1 : Sélection biologique</p>
+                {showGuide && (
+                  <div className="absolute -top-4 -right-2 bg-amber-500 text-white text-[8px] font-black px-2 py-1 rounded-full animate-bounce">
+                    CHOISISSEZ VOTRE PLANTE ICI
+                  </div>
+                )}
             </div>
 
             <div className="space-y-3">
               {Object.entries(categoriesDef).map(([catName, details]) => {
                 const isExpanded = expandedCat === catName;
                 return (
-                  <div key={catName} className="group">
+                  <div key={catName} className="group relative">
                     <button 
                       onClick={() => setExpandedCat(isExpanded ? null : catName)}
                       className={`w-full p-5 flex items-center justify-between transition-all duration-300 rounded-[2rem] border-2 ${
@@ -260,9 +300,13 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
               })}
             </div>
 
-            {/* DATE & VALIDATION */}
             <div className="space-y-6 pt-4">
-                <div className="bg-white p-2 rounded-[2.5rem] border-2 border-[#E8E2D9] flex items-center gap-2">
+                <div className="bg-white p-2 rounded-[2.5rem] border-2 border-[#E8E2D9] flex items-center gap-2 relative overflow-hidden">
+                    {showGuide && (
+                      <div className="absolute inset-0 z-20 bg-amber-500/90 backdrop-blur-sm flex items-center justify-center text-center px-4 animate-in fade-in duration-300">
+                        <p className="text-[10px] text-white font-black uppercase">Sélectionnez la date de mise en terre pour générer votre calendrier.</p>
+                      </div>
+                    )}
                     <div className="w-14 h-14 bg-emerald-50 rounded-[1.8rem] flex items-center justify-center text-emerald-600">
                         <Calendar size={22} />
                     </div>
@@ -300,7 +344,6 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
           </div>
         )}
 
-        {/* NOTIFICATION FLOATING */}
         {message && (
           <div className="fixed bottom-10 left-6 right-6 p-5 bg-[#1A2E26] text-white rounded-[2rem] flex items-center gap-4 shadow-[0_20px_50px_rgba(0,0,0,0.3)] animate-in slide-in-from-bottom-10 border border-white/10 z-[100]">
             <div className="w-8 h-8 bg-emerald-500 rounded-xl flex items-center justify-center">

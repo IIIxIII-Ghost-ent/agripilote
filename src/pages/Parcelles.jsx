@@ -12,7 +12,10 @@ import {
   Sprout,
   CheckCircle2,
   Clock,
-  Map as MapIcon
+  Map as MapIcon,
+  HelpCircle,
+  X,
+  Info
 } from 'lucide-react'
 
 export default function Parcelles({
@@ -26,6 +29,9 @@ export default function Parcelles({
   const [localisation, setLocalisation] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [parcelleStatus, setParcelleStatus] = useState({})
+  
+  // LOGIQUE DU GUIDE (Identique Dashboard)
+  const [showGuide, setShowGuide] = useState(false);
 
   // ================= LOGIQUE (Inchangée) =================
   useEffect(() => {
@@ -71,7 +77,7 @@ export default function Parcelles({
 
   return (
     <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26]">
-      {/* MOTIF CULTUREL DE FOND (Identique Tâches) */}
+      {/* MOTIF CULTUREL DE FOND */}
       <div 
         className="fixed inset-0 opacity-[0.03] pointer-events-none" 
         style={{ 
@@ -82,16 +88,35 @@ export default function Parcelles({
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
-        {/* HEADER HARMONISÉ */}
-        <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl">
-          <button 
+        {/* TOP BAR AVEC BOUTON GUIDE */}
+        <div className="flex justify-between items-center px-2">
+           <button 
             onClick={() => setStep('dashboard')}
-            className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20"
+            className="w-10 h-10 rounded-2xl bg-white border border-[#E8E2D9] flex items-center justify-center text-[#1A2E26] active:scale-90 transition-all shadow-sm"
           >
             <ArrowLeft size={20} />
           </button>
           
-          <div className="relative z-10 text-center space-y-2 pt-4">
+          <button 
+            onClick={() => setShowGuide(!showGuide)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+          >
+            {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+            <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+          </button>
+        </div>
+
+        {/* HEADER HARMONISÉ */}
+        <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+              <Landmark className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Votre Patrimoine</p>
+              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Visualisez ici l'ensemble de vos terres et leur état de synchronisation avec le cloud.</p>
+            </div>
+          )}
+          
+          <div className="relative z-10 text-center space-y-2">
             <div className="flex justify-center items-center gap-2">
               <div className="h-1 w-6 bg-amber-400 rounded-full" />
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">Patrimoine Foncier</span>
@@ -108,73 +133,83 @@ export default function Parcelles({
           <Landmark className="absolute right-[-10px] bottom-[-10px] text-white/5 w-32 h-32 rotate-12" />
         </header>
 
-        {/* SECTION FORMULAIRE (Design Carte Blanche) */}
-        <section className="space-y-4">
+        {/* SECTION FORMULAIRE */}
+        <section className="space-y-4 relative">
           <div className="flex items-center gap-3 px-2">
             <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
             <h3 className="text-xl font-serif font-bold text-[#0A261D]">Nouvel Enregistrement</h3>
           </div>
 
-          <form onSubmit={handleSubmit} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-[#E8E2D9] space-y-4">
-            <div className="space-y-3">
-              <div className="relative group">
-                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600/50 group-focus-within:text-emerald-600 transition-colors">
-                  <LayoutGrid size={18} />
-                </div>
-                <input
-                  className="w-full bg-slate-50 border border-transparent p-4 pl-12 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
-                  placeholder="Nom du domaine (ex: Keur Mouride)"
-                  value={nom}
-                  onChange={e => setNom(e.target.value)}
-                />
+          <div className="relative group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-6 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+                <Plus className="text-amber-600 mb-2" size={28} />
+                <p className="text-[10px] font-black uppercase text-amber-600 mb-1">Ajout Rapide</p>
+                <p className="text-xs text-slate-600 font-bold">Saisissez le nom, la surface en Hectares et le terroir pour créer une nouvelle fiche foncière.</p>
               </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            )}
+            
+            <form onSubmit={handleSubmit} className="bg-white p-6 rounded-[2.5rem] shadow-sm border border-[#E8E2D9] space-y-4">
+              <div className="space-y-3">
                 <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600/50 group-focus-within:text-emerald-600">
-                    <Maximize2 size={18} />
-                  </div>
-                  <input
-                    type="number"
-                    className="w-full bg-slate-50 border border-transparent p-4 pl-12 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
-                    placeholder="Surface (HA)"
-                    value={surface}
-                    onChange={e => setSurface(e.target.value)}
-                  />
-                </div>
-                <div className="relative group">
-                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600/50 group-focus-within:text-emerald-600">
-                    <MapPin size={18} />
+                  <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600/50 group-focus-within:text-emerald-600 transition-colors">
+                    <LayoutGrid size={18} />
                   </div>
                   <input
                     className="w-full bg-slate-50 border border-transparent p-4 pl-12 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
-                    placeholder="Terroir"
-                    value={localisation}
-                    onChange={e => setLocalisation(e.target.value)}
+                    placeholder="Nom du domaine (ex: Keur Mouride)"
+                    value={nom}
+                    onChange={e => setNom(e.target.value)}
                   />
                 </div>
-              </div>
-            </div>
 
-            <button
-              disabled={submitting}
-              className={`w-full py-5 rounded-[2rem] font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 transition-all
-                ${submitting
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  : 'bg-[#1A2E26] text-white hover:bg-[#0A261D] active:scale-[0.98] shadow-lg shadow-emerald-900/20'
-                }`}
-            >
-              {submitting ? "⏳ Validation..." : (
-                <>
-                  <Plus size={18} strokeWidth={3} className="text-amber-400" />
-                  Ajouter au Domaine
-                </>
-              )}
-            </button>
-          </form>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600/50 group-focus-within:text-emerald-600">
+                      <Maximize2 size={18} />
+                    </div>
+                    <input
+                      type="number"
+                      className="w-full bg-slate-50 border border-transparent p-4 pl-12 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
+                      placeholder="Surface (HA)"
+                      value={surface}
+                      onChange={e => setSurface(e.target.value)}
+                    />
+                  </div>
+                  <div className="relative group">
+                    <div className="absolute left-4 top-1/2 -translate-y-1/2 text-emerald-600/50 group-focus-within:text-emerald-600">
+                      <MapPin size={18} />
+                    </div>
+                    <input
+                      className="w-full bg-slate-50 border border-transparent p-4 pl-12 rounded-2xl text-sm font-bold placeholder:text-slate-400 focus:bg-white focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all outline-none"
+                      placeholder="Terroir"
+                      value={localisation}
+                      onChange={e => setLocalisation(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <button
+                disabled={submitting}
+                className={`w-full py-5 rounded-[2rem] font-black uppercase tracking-widest text-[10px] flex items-center justify-center gap-3 transition-all
+                  ${submitting
+                    ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                    : 'bg-[#1A2E26] text-white hover:bg-[#0A261D] active:scale-[0.98] shadow-lg shadow-emerald-900/20'
+                  }`}
+              >
+                {submitting ? "⏳ Validation..." : (
+                  <>
+                    <Plus size={18} strokeWidth={3} className="text-amber-400" />
+                    Ajouter au Domaine
+                  </>
+                )}
+              </button>
+            </form>
+          </div>
         </section>
 
-        {/* LISTE DES PARCELLES (Style Cartes Tâches) */}
+        {/* LISTE DES PARCELLES */}
         <section className="space-y-6">
           <div className="flex items-center gap-3 px-2">
             <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
@@ -182,7 +217,14 @@ export default function Parcelles({
           </div>
 
           {parcelles.length === 0 ? (
-            <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
+            <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center relative overflow-hidden">
+              {showGuide && (
+                <div className="absolute inset-0 z-20 bg-emerald-50/95 backdrop-blur-sm p-8 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                  <MapIcon className="text-emerald-600 mb-2" size={24} />
+                  <p className="text-xs font-bold uppercase text-emerald-800 mb-1">Liste Vide</p>
+                  <p className="text-xs font-serif italic text-emerald-700">Utilisez le formulaire ci-dessus pour commencer à cartographier votre domaine.</p>
+                </div>
+              )}
               <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-300 mb-4 shadow-inner">
                 <MapIcon size={32} />
               </div>
@@ -203,8 +245,15 @@ export default function Parcelles({
                     }}
                     className="group bg-white rounded-[2.5rem] border border-[#E8E2D9] hover:border-emerald-200 hover:shadow-xl transition-all duration-300 relative overflow-hidden cursor-pointer"
                   >
+                    {showGuide && (
+                      <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+                        <Info className="text-white mb-1" size={20} />
+                        <p className="text-[10px] font-black uppercase text-white mb-1 tracking-widest">Détails de Parcelle</p>
+                        <p className="text-[10px] text-amber-50 font-bold leading-tight px-4">Cliquez pour gérer les zones de culture et voir les statistiques de ce champ.</p>
+                      </div>
+                    )}
+
                     <div className="p-6 flex items-center gap-5">
-                      {/* Icône de gauche - Style Case à cocher Tâches */}
                       <div className={`w-14 h-14 rounded-2xl flex-shrink-0 flex items-center justify-center transition-all
                         ${isDone 
                           ? 'bg-emerald-600 text-white shadow-emerald-200' 
@@ -234,13 +283,11 @@ export default function Parcelles({
                         </div>
                       </div>
 
-                      {/* Bouton Action Droite - Style Tâches */}
                       <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-[#F8F7F3] group-hover:bg-amber-500 group-hover:text-white transition-all border border-[#E8E2D9]">
                         <ChevronRight size={18} strokeWidth={3} />
                       </div>
                     </div>
 
-                    {/* Barre de synchronisation si nécessaire (optionnel visuellement) */}
                     <div className="absolute bottom-0 left-0 w-full h-1 bg-emerald-500/10">
                        <div className={`h-full bg-emerald-500 transition-all duration-1000 ${isDone ? 'w-full' : 'w-1/3 opacity-30'}`} />
                     </div>

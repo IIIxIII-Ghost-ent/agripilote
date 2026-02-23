@@ -13,7 +13,9 @@ import {
   Layers,
   PlusCircle,
   XCircle,
-  AlertCircle
+  AlertCircle,
+  HelpCircle,
+  X
 } from 'lucide-react'
 
 export default function ParcelleDetails({
@@ -25,6 +27,7 @@ export default function ParcelleDetails({
   const [zones, setZones] = useState([])
   const [loading, setLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
+  const [showGuide, setShowGuide] = useState(false) // Logique Guide
 
   // --- LOGIQUE D'AFFICHAGE DES ICONES SVG ---
   const getCropStyle = (cultureNom) => {
@@ -173,8 +176,30 @@ export default function ParcelleDetails({
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
+        {/* LOGIQUE BOUTON GUIDE (Même que Dashboard) */}
+        <div className="flex justify-between items-center px-2">
+            <div className="flex items-center gap-2">
+               <MapIcon className="text-emerald-700" size={20} />
+               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Détails Parcelle</span>
+            </div>
+            <button 
+             onClick={() => setShowGuide(!showGuide)}
+             className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all z-30 ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+            >
+              {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+              <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+            </button>
+        </div>
+
         {/* HEADER */}
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl shadow-emerald-900/20">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+              <MapIcon className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Identité du Champ</p>
+              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Retrouvez ici le nom de votre parcelle et l'état de synchronisation avec le cloud.</p>
+            </div>
+          )}
           <button onClick={goBack} className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20">
             <ArrowLeft size={20} />
           </button>
@@ -198,31 +223,56 @@ export default function ParcelleDetails({
 
         {/* STATS */}
         <div className="grid grid-cols-2 gap-4">
-          <div className="bg-emerald-700 p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group">
-              <div className="relative z-10">
-                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Surface Totale</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-4xl font-black tracking-tighter">{parcelle.surface}</span>
-                  <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
-                </div>
+          <div className="relative group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-emerald-900/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+                <Maximize2 className="text-amber-400 mb-1" size={24} />
+                <p className="text-[10px] font-black uppercase text-amber-400">Surface Totale</p>
+                <p className="text-[10px] text-emerald-50">L'espace total défini lors de la création.</p>
               </div>
-              <Maximize2 className="absolute -right-4 -bottom-4 opacity-10 size-24" />
+            )}
+            <div className="bg-emerald-700 p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden h-full">
+                <div className="relative z-10">
+                  <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Surface Totale</p>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-4xl font-black tracking-tighter">{parcelle.surface}</span>
+                    <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
+                  </div>
+                </div>
+                <Maximize2 className="absolute -right-4 -bottom-4 opacity-10 size-24" />
+            </div>
           </div>
           
-          <div className={`p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group transition-all duration-500 ${isFull ? 'bg-red-800' : 'bg-orange-600'}`}>
-              <div className="relative z-10">
-                <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Disponible</p>
-                <div className="flex items-baseline gap-1 mt-1">
-                  <span className="text-4xl font-black tracking-tighter">{surfaceRestante.toFixed(1)}</span>
-                  <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
-                </div>
+          <div className="relative group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-orange-800/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+                <Sprout className="text-amber-400 mb-1" size={24} />
+                <p className="text-[10px] font-black uppercase text-amber-400">Disponible</p>
+                <p className="text-[10px] text-orange-50">Surface qu'il vous reste à allouer à des zones.</p>
               </div>
-              <Sprout className="absolute -right-4 -bottom-4 opacity-10 size-24" />
+            )}
+            <div className={`p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden h-full transition-all duration-500 ${isFull ? 'bg-red-800' : 'bg-orange-600'}`}>
+                <div className="relative z-10">
+                  <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Disponible</p>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-4xl font-black tracking-tighter">{surfaceRestante.toFixed(1)}</span>
+                    <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
+                  </div>
+                </div>
+                <Sprout className="absolute -right-4 -bottom-4 opacity-10 size-24" />
+            </div>
           </div>
         </div>
 
         {/* AJOUT ZONE */}
-        <section className="relative">
+        <section className="relative group">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[3rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+              <PlusCircle className="text-amber-600 mb-2" size={32} />
+              <p className="text-xs font-black uppercase text-amber-600 mb-1">Découpage</p>
+              <p className="text-sm text-slate-600 font-medium">Créez des sous-sections (zones) pour diversifier vos cultures sur une même parcelle.</p>
+            </div>
+          )}
           <div className="bg-white p-8 rounded-[3rem] border border-[#E8E2D9] shadow-sm relative overflow-hidden">
             <div className="flex items-center gap-4 mb-8">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shadow-inner transition-all duration-500 ${isFull ? 'bg-red-50 text-red-800 scale-110' : 'bg-orange-50 text-orange-600'}`}>
@@ -252,7 +302,7 @@ export default function ParcelleDetails({
         </section>
 
         {/* LISTE DES ZONES */}
-        <section className="space-y-6">
+        <section className="space-y-6 relative">
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-emerald-600 rounded-full" />
@@ -263,7 +313,15 @@ export default function ParcelleDetails({
             </span>
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-4 relative">
+            {showGuide && zones.length > 0 && (
+              <div className="absolute inset-0 z-20 bg-[#FDFCF9]/90 backdrop-blur-sm rounded-[2.5rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300 border-2 border-dashed border-amber-500">
+                <Layers className="text-amber-600 mb-2" size={32} />
+                <p className="text-xs font-black uppercase text-amber-600 mb-1">Gestion des Zones</p>
+                <p className="text-sm text-slate-600 font-medium italic">Cliquez sur une zone pour voir ses détails ou changez son statut (Culture, Récolté, Repos) via les boutons.</p>
+              </div>
+            )}
+
             {zones.length === 0 ? (
               <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
                 <Layers className="text-emerald-100 mb-4" size={48} />
@@ -319,8 +377,6 @@ export default function ParcelleDetails({
                              )}
                           </div>
                         </div>
-
-                      
                       </div>
 
                       {/* Statuts */}

@@ -19,7 +19,9 @@ import {
   Clock,
   Wallet,
   Receipt,
-  Map as MapIcon
+  Map as MapIcon,
+  HelpCircle,
+  Info
 } from 'lucide-react'
 
 const EXPENSE_CATEGORIES = [
@@ -40,6 +42,7 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showRevenueForm, setShowRevenueForm] = useState(false)
   const [formError, setFormError] = useState(null)
+  const [showGuide, setShowGuide] = useState(false)
 
   const [expenseForm, setExpenseForm] = useState({ type: 'semences', parcelle_id: '', montant: '', description: '' })
   const [revenueForm, setRevenueForm] = useState({ parcelle_id: '', quantite: '', prix: '' })
@@ -202,6 +205,21 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
+        {/* TOP BAR AVEC GUIDE */}
+        <div className="flex justify-between items-center px-2">
+           <div className="flex items-center gap-2">
+              <Wallet className="text-[#1A2E26]/50" size={16} />
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#1A2E26]/50">Finance</span>
+           </div>
+           <button 
+            onClick={() => setShowGuide(!showGuide)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-[#1A2E26] border border-[#E8E2D9]'}`}
+           >
+             {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+             <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+           </button>
+        </div>
+
         {/* HEADER */}
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl">
           <button 
@@ -230,7 +248,14 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
         </header>
 
         {/* RÉSUMÉ DYNAMIQUE */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="relative grid grid-cols-2 gap-4">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md rounded-[2.5rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300 border-2 border-amber-400/50">
+              <TrendingUp className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Santé Financière</p>
+              <p className="text-sm font-serif italic text-white max-w-[240px]">Suivez votre bénéfice net en temps réel. Le vert indique un profit, le orange une perte.</p>
+            </div>
+          )}
           <div className={`p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group transition-all duration-500 col-span-2 ${marge >= 0 ? 'bg-emerald-600' : 'bg-orange-700'}`}>
               <div className="relative z-10 flex flex-col items-center">
                  <p className="text-[10px] font-black opacity-60 uppercase tracking-[0.3em]">Solde de Campagne</p>
@@ -258,7 +283,7 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
           </div>
         </div>
 
-        {/* FILTRES PARCELLES AMÉLIORÉS */}
+        {/* FILTRES PARCELLES */}
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-1">
               <MapIcon size={14} className="text-amber-500" />
@@ -286,7 +311,14 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
         </div>
 
         {/* ACTIONS PRINCIPALES */}
-        <div className="space-y-4">
+        <div className="relative space-y-4">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-emerald-900/95 backdrop-blur-md rounded-[2.5rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300 border-2 border-amber-400/50">
+              <Plus className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Nouvelle Saisie</p>
+              <p className="text-sm font-serif italic text-white max-w-[240px]">Ajoutez vos achats ou vos ventes ici. Générez ensuite un PDF pro pour vos archives.</p>
+            </div>
+          )}
           <button 
             onClick={() => { setShowExpenseForm(!showExpenseForm); setShowRevenueForm(false); setFormError(null); }}
             className={`w-full p-4 rounded-[2rem] border transition-all flex items-center justify-between group active:scale-[0.98] ${showExpenseForm ? 'bg-orange-50 border-orange-200 shadow-inner' : 'bg-white border-[#E8E2D9] shadow-sm'}`}
@@ -391,7 +423,14 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
         </div>
 
         {/* HISTORIQUE */}
-        <section className="space-y-4">
+        <section className="relative space-y-4">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-slate-900/95 backdrop-blur-md rounded-[2rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300 border-2 border-amber-400/50">
+              <Clock className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Journal de Bord</p>
+              <p className="text-sm font-serif italic text-white max-w-[240px]">Retrouvez ici vos 10 dernières transactions pour un contrôle rapide.</p>
+            </div>
+          )}
           <div className="flex items-center gap-2 px-1">
              <Clock size={14} className="text-slate-400" />
              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dernières opérations</span>

@@ -3,7 +3,7 @@ import {
   Sun, Droplets, MapPin, Calendar, TrendingUp, 
   Plus, Microscope, ChevronRight, AlertTriangle, Clock, CloudRain,
   Leaf, Sprout, ThermometerSun, Waves, Landmark, LayoutGrid, Activity,
-  Wind, Navigation, Sunrise, Sunset 
+  Wind, Navigation, Sunrise, Sunset, Info, HelpCircle, X
 } from 'lucide-react';
 import { db } from '../lib/db';
 
@@ -15,8 +15,8 @@ export default function Dashboard({
   openNewFieldForm
 }) {
   const [taches, setTaches] = useState([]);
+  const [showGuide, setShowGuide] = useState(false);
   
-  // Logique pour choisir l'icône de soleil dynamique (style iPhone)
   const getSunIcon = () => {
     const hour = new Date().getHours();
     if (hour >= 6 && hour < 14) return <Sunrise size={40} strokeWidth={1.5} className="text-amber-400" />;
@@ -32,7 +32,6 @@ export default function Dashboard({
     icon: getSunIcon()
   });
 
-  // --- LOGIQUE (Inchangée) ---
   useEffect(() => {
     if (!user?.id) return;
     const loadData = async () => {
@@ -95,21 +94,40 @@ export default function Dashboard({
 
   return (
     <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26]">
-     {/* MOTIF CULTUREL - Minimalisme Africain (Style Tissage Manjak) */}
-<div 
-  className="fixed inset-0 opacity-[0.03] pointer-events-none" 
-  style={{ 
-    backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")`,
-    backgroundSize: '80px 80px'
-  }}
->
-</div>
+      <div 
+        className="fixed inset-0 opacity-[0.03] pointer-events-none" 
+        style={{ 
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")`,
+          backgroundSize: '80px 80px'
+        }}
+      />
+
       <div className="relative p-6 space-y-8 max-w-2xl mx-auto pt-10">
         
-        {/* PREMIUM WEATHER BANNER */}
+        <div className="flex justify-between items-center px-2">
+           <div className="flex items-center gap-2">
+              <Sprout className="text-emerald-700" size={20} />
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Tableau de Bord</span>
+           </div>
+           <button 
+            onClick={() => setShowGuide(!showGuide)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+           >
+             {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+             <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+           </button>
+        </div>
+
+        {/* WEATHER BANNER */}
         <header className="relative group overflow-hidden bg-gradient-to-br from-[#064e3b] via-[#064e3b] to-[#022c22] rounded-[3rem] p-8 text-white shadow-[0_20px_50px_rgba(6,78,59,0.3)]">
-          <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-amber-400/10 rounded-full blur-3xl group-hover:bg-amber-400/20 transition-colors duration-700" />
-          
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+              <Sun className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Météo Agricole</p>
+              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Prévoyez vos arrosages selon la température et les risques de pluie locaux.</p>
+            </div>
+          )}
+          <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-amber-400/10 rounded-full blur-3xl" />
           <div className="relative z-10 space-y-6">
             <div className="flex justify-between items-start">
               <div className="space-y-1">
@@ -127,7 +145,6 @@ export default function Dashboard({
                 <span className="text-2xl font-black mt-1 tracking-tighter">{weather.temp}°C</span>
               </div>
             </div>
-
             <div className="flex gap-4 pt-4 border-t border-white/10">
               <WeatherDetail icon={<Waves size={16} />} label="Eau" value={`${weather.humidity}%`} color="text-blue-300" />
               <WeatherDetail icon={<CloudRain size={16} />} label="Pluie" value={`${weather.rain}mm`} color="text-cyan-300" />
@@ -136,7 +153,7 @@ export default function Dashboard({
           </div>
         </header>
 
-        {/* ELEGANT STATS GRID */}
+        {/* STATS GRID AVEC RETOURNEMENT */}
         <div className="grid grid-cols-2 gap-4">
           <StatBox 
             label="Ma Terre" 
@@ -144,6 +161,8 @@ export default function Dashboard({
             unit="HA" 
             icon={<LayoutGrid className="text-emerald-600" size={24} />} 
             circleColor="bg-emerald-50"
+            showGuide={showGuide}
+            guideText="Surface totale de tous vos champs enregistrés sur AgriPilote."
           />
           <StatBox 
             label="Mes Espèces" 
@@ -151,6 +170,8 @@ export default function Dashboard({
             unit="TYPES" 
             icon={<Sprout className="text-amber-600" size={24} />} 
             circleColor="bg-amber-50"
+            showGuide={showGuide}
+            guideText="Nombre de variétés différentes que vous cultivez actuellement."
           />
           <StatBox 
             label="Travail" 
@@ -159,6 +180,8 @@ export default function Dashboard({
             icon={<Activity className={stats.retard > 0 ? "text-rose-600" : "text-orange-600"} size={24} />} 
             circleColor={stats.retard > 0 ? "bg-rose-50" : "bg-orange-50"}
             isUrgent={stats.retard > 0}
+            showGuide={showGuide}
+            guideText="Tâches urgentes ou prévues pour aujourd'hui dans votre agenda."
           />
           <StatBox 
             label="Mes Champs" 
@@ -166,47 +189,67 @@ export default function Dashboard({
             unit="UNITÉS" 
             icon={<Landmark className="text-blue-600" size={24} />} 
             circleColor="bg-blue-50"
+            showGuide={showGuide}
+            guideText="Nombre total de parcelles cartographiées dans votre domaine."
           />
         </div>
 
-        {/* ACTIONS MAJEURES */}
+        {/* ACTIONS MAJEURES AVEC RETOURNEMENT */}
         <div className="grid grid-cols-1 gap-4">
-          <button 
-            onClick={openNewFieldForm}
-            className="group relative h-28 bg-[#1A2E26] rounded-[2.5rem] flex items-center px-8 text-white transition-all active:scale-[0.98] shadow-xl overflow-hidden"
-          >
-            <div className="absolute right-0 top-0 h-full w-48 bg-emerald-500/5 -skew-x-12 translate-x-10 group-hover:translate-x-0 transition-transform duration-700" />
-            <div className="flex items-center gap-6 z-10">
-              <div className="w-16 h-16 rounded-3xl bg-amber-500 flex items-center justify-center text-white shadow-[0_10px_20px_rgba(245,158,11,0.3)] group-hover:rotate-90 transition-transform">
-                <Plus size={32} strokeWidth={3} />
+          <div className="relative group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+                <Navigation className="text-amber-400 mb-1" size={24} />
+                <p className="text-[10px] font-black uppercase text-amber-400 mb-1">Cartographie</p>
+                <p className="text-xs text-emerald-50 font-medium">Délimitez vos parcelles sur le GPS pour un suivi précis.</p>
               </div>
-              <div className="text-left">
-                <p className="text-xl font-bold tracking-tight uppercase">Ajouter un champ</p>
-                <p className="text-xs text-emerald-400 font-medium opacity-80 italic underline underline-offset-4">Déclarer une nouvelle parcelle</p>
+            )}
+            <button 
+              onClick={openNewFieldForm}
+              className="w-full relative h-28 bg-[#1A2E26] rounded-[2.5rem] flex items-center px-8 text-white transition-all active:scale-[0.98] shadow-xl overflow-hidden"
+            >
+              <div className="absolute right-0 top-0 h-full w-48 bg-emerald-500/5 -skew-x-12 translate-x-10 group-hover:translate-x-0 transition-transform duration-700" />
+              <div className="flex items-center gap-6 z-10">
+                <div className="w-16 h-16 rounded-3xl bg-amber-500 flex items-center justify-center text-white shadow-lg group-hover:rotate-90 transition-transform">
+                  <Plus size={32} strokeWidth={3} />
+                </div>
+                <div className="text-left">
+                  <p className="text-xl font-bold tracking-tight uppercase">Ajouter un champ</p>
+                  <p className="text-xs text-emerald-400 font-medium opacity-80 italic underline underline-offset-4">Déclarer une nouvelle parcelle</p>
+                </div>
               </div>
-            </div>
-            <Navigation className="absolute right-8 opacity-10 group-hover:translate-x-2 transition-transform" size={40} />
-          </button>
+              <Navigation className="absolute right-8 opacity-10 group-hover:translate-x-2 transition-transform" size={40} />
+            </button>
+          </div>
 
-          <button 
-            onClick={() => setStep('diagnostic')}
-            className="group relative h-24 bg-white rounded-[2rem] flex items-center px-8 text-[#1A2E26] border border-[#E8E2D9] transition-all active:scale-[0.98] shadow-sm hover:border-amber-200"
-          >
-            <div className="flex items-center gap-6">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100">
-                <Microscope size={28} strokeWidth={1.5} />
+          <div className="relative group">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[2rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+                <Microscope className="text-amber-600 mb-1" size={24} />
+                <p className="text-[10px] font-black uppercase text-amber-600 mb-1">Diagnostic IA</p>
+                <p className="text-xs text-slate-600 font-bold">Identifiez les maladies des plantes avec une simple photo.</p>
               </div>
-              <div className="text-left">
-                <p className="text-lg font-bold tracking-tight uppercase">Docteur Plantes IA</p>
-                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Analyse & Santé</p>
+            )}
+            <button 
+              onClick={() => setStep('diagnostic')}
+              className="w-full relative h-24 bg-white rounded-[2rem] flex items-center px-8 text-[#1A2E26] border border-[#E8E2D9] transition-all active:scale-[0.98] shadow-sm hover:border-amber-200"
+            >
+              <div className="flex items-center gap-6">
+                <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100">
+                  <Microscope size={28} strokeWidth={1.5} />
+                </div>
+                <div className="text-left">
+                  <p className="text-lg font-bold tracking-tight uppercase">Docteur Plantes IA</p>
+                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Analyse & Santé</p>
+                </div>
               </div>
-            </div>
-            <ChevronRight className="ml-auto text-amber-500 group-hover:translate-x-2 transition-transform" />
-          </button>
+              <ChevronRight className="ml-auto text-amber-500 group-hover:translate-x-2 transition-transform" />
+            </button>
+          </div>
         </div>
 
         {/* SECTION AGENDA */}
-        <section className="space-y-6">
+        <section className="space-y-6 relative">
           <div className="flex justify-between items-center px-2">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
@@ -216,7 +259,14 @@ export default function Dashboard({
           </div>
 
           {dashboardTasks.length === 0 ? (
-            <div className="bg-white rounded-[3rem] p-12 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
+            <div className="bg-white rounded-[3rem] p-12 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center relative overflow-hidden">
+               {showGuide && (
+                <div className="absolute inset-0 z-20 bg-emerald-50/95 backdrop-blur-sm p-8 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                  <Calendar className="text-emerald-600 mb-2" size={24} />
+                  <p className="text-xs font-bold uppercase text-emerald-800 mb-1">Gestion des tâches</p>
+                  <p className="text-xs font-serif italic text-emerald-700">Toutes vos activités (arrosage, récolte) apparaîtront ici.</p>
+                </div>
+              )}
               <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mb-4 shadow-inner">
                 <Leaf size={32} />
               </div>
@@ -265,9 +315,18 @@ function WeatherDetail({ icon, label, value, color }) {
   );
 }
 
-function StatBox({ label, value, unit, icon, circleColor, isUrgent }) {
+function StatBox({ label, value, unit, icon, circleColor, isUrgent, showGuide, guideText }) {
   return (
     <div className={`relative overflow-hidden bg-white p-6 rounded-[2.5rem] border border-[#E8E2D9] shadow-sm transition-all hover:shadow-md group ${isUrgent ? 'ring-2 ring-rose-500/10' : ''}`}>
+      {/* OVERLAY DE GUIDE (RETOURNOIR) */}
+      {showGuide && (
+        <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+          <Info className="text-white mb-1" size={20} />
+          <p className="text-[10px] font-black uppercase text-white mb-1 tracking-widest">{label}</p>
+          <p className="text-[10px] text-amber-50 font-bold leading-tight">{guideText}</p>
+        </div>
+      )}
+      
       <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${circleColor}`}>
         {icon}
       </div>

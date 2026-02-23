@@ -4,7 +4,7 @@ import {
   Cloud, Sparkles, AlertCircle, History, 
   RefreshCw, ChevronRight, Info, ShieldCheck, 
   Sprout, MapPin, X, Leaf, TreeDeciduous, Cherry, Settings2, Calendar, Activity,
-  SearchX, AlertTriangle
+  SearchX, AlertTriangle, HelpCircle
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
@@ -83,7 +83,8 @@ export default function Diagnostic({ user, setStep }) {
   const [actions, setActions] = useState(null)
   const [loading, setLoading] = useState(true)
   const [historyActions, setHistoryActions] = useState(null)
-  const [diagError, setDiagError] = useState(null) // Nouvel état pour les messages d'erreur designés
+  const [diagError, setDiagError] = useState(null)
+  const [showGuide, setShowGuide] = useState(false) // Logique de guide
   const online = navigator.onLine
 
   const categorizedSymptoms = useMemo(() => {
@@ -169,177 +170,167 @@ export default function Diagnostic({ user, setStep }) {
   }, [selectedZone])
 
   const runDiagnostic = async () => {
-  setDiagError(null)
-  setResult(null)
-  setActions(null)
+    setDiagError(null)
+    setResult(null)
+    setActions(null)
 
-  if (!selectedZone || selectedSymptoms.length === 0) return
+    if (!selectedZone || selectedSymptoms.length === 0) return
 
-  /* 1️⃣ Charger les objets symptômes sélectionnés */
-  const selectedSymptomObjects = await db.symptomes
-    .where('id')
-    .anyOf(selectedSymptoms)
-    .toArray()
+    const selectedSymptomObjects = await db.symptomes
+      .where('id')
+      .anyOf(selectedSymptoms)
+      .toArray()
 
-  const strongCount = selectedSymptomObjects.filter(
-    s => (s.specificite ?? 1) >= 4
-  ).length
+    const strongCount = selectedSymptomObjects.filter(
+      s => (s.specificite ?? 1) >= 4
+    ).length
 
-  const mediumCount = selectedSymptomObjects.filter(
-    s => (s.specificite ?? 1) >= 3
-  ).length
+    const mediumCount = selectedSymptomObjects.filter(
+      s => (s.specificite ?? 1) >= 3
+    ).length
 
-  if (
-    strongCount === 0 &&
-    mediumCount < 2 &&
-    selectedSymptoms.length < 3
-  ) {
-    setDiagError({
-      title: "Précision insuffisante",
-      message:
-        "Les symptômes sélectionnés sont trop généraux. Ajoutez des symptômes plus caractéristiques.",
-      type: "warning"
-    })
-    return
-  }
+    if (
+      strongCount === 0 &&
+      mediumCount < 2 &&
+      selectedSymptoms.length < 3
+    ) {
+      setDiagError({
+        title: "Précision insuffisante",
+        message:
+          "Les symptômes sélectionnés sont trop généraux. Ajoutez des symptômes plus caractéristiques.",
+        type: "warning"
+      })
+      return
+    }
 
-  /* 2️⃣ Récupérer maladies + toutes les liaisons en UNE fois */
+    const maladies = await db.maladies
+      .where('culture_id')
+      .equals(selectedZone.culture_id)
+      .toArray()
 
-  const maladies = await db.maladies
-    .where('culture_id')
-    .equals(selectedZone.culture_id)
-    .toArray()
+    if (maladies.length === 0) return
 
-  if (maladies.length === 0) return
+    const maladieIds = maladies.map(m => m.id)
 
-  const maladieIds = maladies.map(m => m.id)
+    const allLinks = await db.maladie_symptomes
+      .where('maladie_id')
+      .anyOf(maladieIds)
+      .toArray()
 
-  const allLinks = await db.maladie_symptomes
-    .where('maladie_id')
-    .anyOf(maladieIds)
-    .toArray()
+    const scoreMap = {}
 
-  /* 3️⃣ Construire un map de score par maladie */
-  const scoreMap = {}
+    for (const link of allLinks) {
+      if (!selectedSymptoms.includes(link.symptome_id)) continue
 
-  for (const link of allLinks) {
-    if (!selectedSymptoms.includes(link.symptome_id)) continue
+      const symptome = selectedSymptomObjects.find(
+        s => s.id === link.symptome_id
+      )
 
-    const symptome = selectedSymptomObjects.find(
-      s => s.id === link.symptome_id
+      const poids = link.poids ?? 1
+      const specificite = symptome?.specificite ?? 1
+
+      if (!scoreMap[link.maladie_id]) {
+        scoreMap[link.maladie_id] = 0
+      }
+
+      scoreMap[link.maladie_id] += poids * specificite
+    }
+
+    let best = null
+    let bestScore = 0
+
+    for (const m of maladies) {
+      const score = scoreMap[m.id] ?? 0
+      if (score > bestScore) {
+        bestScore = score
+        best = m
+      }
+    }
+
+    const avgSpecificite =
+      selectedSymptomObjects.reduce((a, s) => a + (s.specificite ?? 1), 0) /
+      selectedSymptomObjects.length
+
+    const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
+    if (!best || bestScore < minScore) {
+      setDiagError({
+        title: "Correspondance insuffisante",
+        message:
+          "Aucune maladie ne correspond suffisamment à cette combinaison.",
+        type: "search"
+      })
+      return
+    }
+
+    const confidence = Math.min(
+      95,
+      Math.round(50 + (bestScore / (selectedSymptoms.length * 5)) * 40)
     )
 
-    const poids = link.poids ?? 1
-    const specificite = symptome?.specificite ?? 1
+    let actionsData = null
 
-    if (!scoreMap[link.maladie_id]) {
-      scoreMap[link.maladie_id] = 0
+    if (navigator.onLine) {
+      const { data, error } = await supabase
+        .from('actions_prioritaires')
+        .select('*')
+        .eq('culture_id', selectedZone.culture_id)
+        .eq('maladie_id', best.id)
+        .single()
+
+      if (!error && data) {
+        actionsData = data
+        await db.actions_prioritaires.put(data)
+      }
+    } else {
+      actionsData = await db.actions_prioritaires
+        .where('[culture_id+maladie_id]')
+        .equals([selectedZone.culture_id, best.id])
+        .first()
     }
 
-    scoreMap[link.maladie_id] += poids * specificite
-  }
-
-  /* 4️⃣ Trouver la meilleure maladie */
-  let best = null
-  let bestScore = 0
-
-  for (const m of maladies) {
-    const score = scoreMap[m.id] ?? 0
-    if (score > bestScore) {
-      bestScore = score
-      best = m
+    const record = {
+      id: crypto.randomUUID(),
+      user_id: user.id,
+      zone_id: selectedZone.id,
+      maladie_nom: best.nom,
+      confidence,
+      created_at: new Date().toISOString(),
+      actions_snapshot: actionsData
+        ? {
+            actions_bio: actionsData.actions_bio,
+            prevention: actionsData.prevention,
+            conseil: actionsData.conseil,
+            niveau_urgence: actionsData.niveau_urgence,
+            maladie_nom: best.nom,
+            culture_nom: selectedZone.culture_nom,
+            date: new Date().toISOString(),
+            confidence
+          }
+        : null,
+      synced: 0
     }
-  }
 
-  /* 5️⃣ Seuil dynamique */
-const avgSpecificite =
-  selectedSymptomObjects.reduce((a, s) => a + (s.specificite ?? 1), 0) /
-  selectedSymptomObjects.length
+    await db.diagnostic_history.add(record)
+    setHistory(h => [record, ...h])
+    setResult({ ...best, confidence })
+    setActions(actionsData)
 
-const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
-  if (!best || bestScore < minScore) {
-    setDiagError({
-      title: "Correspondance insuffisante",
-      message:
-        "Aucune maladie ne correspond suffisamment à cette combinaison.",
-      type: "search"
-    })
-    return
-  }
+    if (navigator.onLine) {
+      const { synced, ...toSupabase } = record
+      const { error } = await supabase
+        .from('historique_diagnostics')
+        .insert([toSupabase])
 
-  /* 6️⃣ Confiance intelligente */
-  const confidence = Math.min(
-    95,
-    Math.round(50 + (bestScore / (selectedSymptoms.length * 5)) * 40)
-  )
-
-  /* 7️⃣ Récupération actions prioritaires */
-  let actionsData = null
-
-  if (navigator.onLine) {
-    const { data, error } = await supabase
-      .from('actions_prioritaires')
-      .select('*')
-      .eq('culture_id', selectedZone.culture_id)
-      .eq('maladie_id', best.id)
-      .single()
-
-    if (!error && data) {
-      actionsData = data
-      await db.actions_prioritaires.put(data)
-    }
-  } else {
-    actionsData = await db.actions_prioritaires
-      .where('[culture_id+maladie_id]')
-      .equals([selectedZone.culture_id, best.id])
-      .first()
-  }
-
-  /* 8️⃣ Enregistrement historique */
-  const record = {
-    id: crypto.randomUUID(),
-    user_id: user.id,
-    zone_id: selectedZone.id,
-    maladie_nom: best.nom,
-    confidence,
-    created_at: new Date().toISOString(),
-    actions_snapshot: actionsData
-      ? {
-          actions_bio: actionsData.actions_bio,
-          prevention: actionsData.prevention,
-          conseil: actionsData.conseil,
-          niveau_urgence: actionsData.niveau_urgence,
-          maladie_nom: best.nom,
-          culture_nom: selectedZone.culture_nom,
-          date: new Date().toISOString(),
-          confidence
-        }
-      : null,
-    synced: 0
-  }
-
-  await db.diagnostic_history.add(record)
-  setHistory(h => [record, ...h])
-  setResult({ ...best, confidence })
-  setActions(actionsData)
-
-  /* 9️⃣ Sync Supabase */
-  if (navigator.onLine) {
-    const { synced, ...toSupabase } = record
-    const { error } = await supabase
-      .from('historique_diagnostics')
-      .insert([toSupabase])
-
-    if (!error) {
-      await db.diagnostic_history.update(record.id, { synced: 1 })
-      setHistory(prev =>
-        prev.map(item =>
-          item.id === record.id ? { ...item, synced: 1 } : item
+      if (!error) {
+        await db.diagnostic_history.update(record.id, { synced: 1 })
+        setHistory(prev =>
+          prev.map(item =>
+            item.id === record.id ? { ...item, synced: 1 } : item
+          )
         )
-      )
+      }
     }
   }
-}
 
   if (loading) return (
     <div className="min-h-screen bg-[#FDFCF9] flex flex-col items-center justify-center gap-4">
@@ -358,18 +349,40 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
+        {/* TOP BAR AVEC BOUTON GUIDE */}
+        <div className="flex justify-between items-center px-2">
+           <div className="flex items-center gap-2">
+              <Microscope className="text-emerald-700" size={20} />
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Analyse Phytosanitaire</span>
+           </div>
+           <button 
+            onClick={() => setShowGuide(!showGuide)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+           >
+             {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
+             <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
+           </button>
+        </div>
+
         {/* HEADER */}
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-2xl">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
+              <Microscope className="text-amber-400 mb-2" size={32} />
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Expertise Phytosanitaire</p>
+              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Identifiez les maladies de vos cultures en sélectionnant les symptômes observés sur le terrain.</p>
+            </div>
+          )}
           <button onClick={() => setStep('dashboard')} className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20">
             <ArrowLeft size={20} />
           </button>
           <div className="relative z-10 text-center space-y-2 pt-4">
             <div className="flex justify-center items-center gap-2">
               <div className="h-1 w-6 bg-amber-400 rounded-full" />
-              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">Expertise Phytosanitaire</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">Diagnostic Intelligent</span>
               <div className="h-1 w-6 bg-amber-400 rounded-full" />
             </div>
-            <h1 className="text-3xl font-serif font-medium">Diagnostic</h1>
+            <h1 className="text-3xl font-serif font-medium">Santé des Plantes</h1>
             <div className="flex items-center justify-center gap-2">
                 <div className={`w-1.5 h-1.5 rounded-full ${navigator.onLine ? 'bg-emerald-400' : 'bg-orange-400 animate-pulse'}`} />
                 <p className="text-[9px] font-black text-white/60 uppercase tracking-widest">{navigator.onLine ? 'Cloud Synchronisé' : 'Mode Local'}</p>
@@ -379,7 +392,14 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
         </header>
 
         {/* 1. SELECTION ZONE */}
-        <section className="space-y-4">
+        <section className="space-y-4 relative">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300">
+              <MapPin className="text-white mb-1" size={24} />
+              <p className="text-[10px] font-black uppercase text-white mb-1">Étape 1 : La Parcelle</p>
+              <p className="text-[10px] text-amber-50 font-bold leading-tight">Choisissez le champ où vous observez un problème.</p>
+            </div>
+          )}
           <div className="flex items-center gap-3 px-2">
             <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shadow-sm">
                <MapPin size={16} strokeWidth={2.5} />
@@ -411,7 +431,14 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
 
         {/* 2. SYMPTOMES PAR CATEGORIES */}
         {selectedZone && (
-          <section className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-700">
+          <section className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-700 relative">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300">
+                <Leaf className="text-white mb-1" size={24} />
+                <p className="text-[10px] font-black uppercase text-white mb-1">Étape 2 : Les Symptômes</p>
+                <p className="text-[10px] text-amber-50 font-bold leading-tight">Cochez tout ce que vous voyez sur la plante. Plus vous en mettez, plus l'IA sera précise.</p>
+              </div>
+            )}
             <div className="flex items-center justify-between px-2">
               <div className="flex items-center gap-3">
                 <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs shadow-sm">2</div>
@@ -424,7 +451,6 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
               )}
             </div>
 
-            {/* Sélecteur de Catégories Amélioré */}
             <div className="flex gap-3 overflow-x-auto pb-4 px-2 scrollbar-hide">
               {Object.entries(categorizedSymptoms).map(([name, cat]) => {
                 const isActive = activeCategory === name;
@@ -452,7 +478,6 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
               })}
             </div>
             
-            {/* Grille de symptômes filtrée */}
             <div className="grid grid-cols-2 gap-3 min-h-[220px]">
               {categorizedSymptoms[activeCategory].list.map(s => {
                 const active = selectedSymptoms.includes(s.id)
@@ -479,15 +504,8 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
                   </button>
                 )
               })}
-              {categorizedSymptoms[activeCategory].list.length === 0 && (
-                 <div className="col-span-2 py-10 text-center opacity-40">
-                    <Leaf className="mx-auto mb-2" size={24} />
-                    <p className="text-[10px] font-bold uppercase">Aucun symptôme dans cette catégorie</p>
-                 </div>
-              )}
             </div>
 
-            {/* AFFICHAGE DES ERREURS DESIGNÉES */}
             {diagError && (
               <div className="bg-rose-50 border-2 border-rose-100 p-6 rounded-[2.5rem] flex gap-4 animate-in slide-in-from-top-2">
                 <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-rose-500 shadow-sm flex-shrink-0">
@@ -518,6 +536,13 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
         {/* 3. RESULTAT IMMEDIAT */}
         {result && (
           <div className="bg-[#0A261D] text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden animate-in zoom-in duration-500 border border-emerald-400/20">
+            {showGuide && (
+              <div className="absolute inset-0 z-20 bg-emerald-600/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                <Activity className="text-white mb-2" size={32} />
+                <p className="text-xs font-bold uppercase tracking-widest text-white mb-1">Résultat d'Analyse</p>
+                <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Voici la maladie la plus probable selon vos indications et le taux de confiance de l'IA.</p>
+              </div>
+            )}
             <div className="relative z-10 space-y-6">
               <div className="flex items-center justify-between">
                 <div className="px-4 py-1.5 bg-emerald-400/10 rounded-full border border-emerald-400/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">
@@ -541,7 +566,14 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
 
         {/* 3b. ACTIONS DIRECTES */}
         {actions && (
-          <div className="bg-white p-8 rounded-[3rem] border border-emerald-100 shadow-xl space-y-6 animate-in fade-in slide-in-from-top-4 duration-500">
+          <div className="bg-white p-8 rounded-[3rem] border border-emerald-100 shadow-xl space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 relative">
+             {showGuide && (
+              <div className="absolute inset-0 z-20 bg-emerald-500/95 backdrop-blur-md rounded-[3rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
+                <ShieldCheck className="text-white mb-2" size={32} />
+                <p className="text-xs font-bold uppercase tracking-widest text-white mb-1">Plan d'Action</p>
+                <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Suivez ces étapes bio pour soigner votre culture et sauver votre récolte.</p>
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
@@ -577,7 +609,14 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
         )}
 
         {/* 4. HISTORIQUE */}
-        <section className="space-y-4 pt-8 border-t border-[#E8E2D9]">
+        <section className="space-y-4 pt-8 border-t border-[#E8E2D9] relative">
+           {showGuide && (
+              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-sm rounded-[2.5rem] p-6 flex flex-col items-center justify-center text-center border-2 border-amber-500 animate-in fade-in duration-300">
+                <History className="text-amber-600 mb-2" size={32} />
+                <p className="text-xs font-bold uppercase tracking-widest text-amber-600 mb-1">Journal de Bord</p>
+                <p className="text-sm font-serif italic text-slate-600 max-w-[240px]">Retrouvez ici tous vos anciens diagnostics même sans connexion internet.</p>
+              </div>
+            )}
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3 text-slate-400">
                 <History size={16} />
@@ -639,14 +678,11 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
           )}
         </section>
 
-        {/* MODAL HISTORIQUE - RAPPORT D'ANALYSE SUBLIMÉ */}
+        {/* MODAL HISTORIQUE */}
         {historyActions && (
           <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-[#1A2E26]/80 backdrop-blur-md animate-in fade-in duration-300">
             <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-8 space-y-8 relative overflow-hidden animate-in slide-in-from-bottom-12 shadow-2xl">
-              
               <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 via-amber-400 to-emerald-600" />
-
-              {/* Entête du Rapport */}
               <div className="flex items-start justify-between">
                 <div className="space-y-1">
                     <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 w-fit px-3 py-1 rounded-full border border-emerald-100">
@@ -660,8 +696,6 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
                   <X size={24} />
                 </button>
               </div>
-
-              {/* Barre de stats rapide */}
               <div className="grid grid-cols-2 gap-4">
                 <div className="bg-slate-50 p-4 rounded-[2rem] flex flex-col items-center text-center">
                     <Calendar size={16} className="text-slate-400 mb-1" />
@@ -674,7 +708,6 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
                     <span className="text-xs font-bold text-emerald-800">{historyActions.confidence}%</span>
                 </div>
               </div>
-
               <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 scrollbar-hide">
                 <div className="p-6 bg-emerald-50/50 rounded-[2.5rem] border border-emerald-100/50">
                   <div className="flex items-center gap-2 mb-3">
@@ -683,7 +716,6 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
                   </div>
                   <p className="text-sm leading-relaxed text-emerald-900 font-medium">{historyActions.actions_bio}</p>
                 </div>
-
                 <div className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-200">
                   <div className="flex items-center gap-2 mb-3">
                     <ShieldCheck size={16} className="text-slate-600" />
@@ -691,10 +723,9 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
                   </div>
                   <p className="text-sm leading-relaxed text-slate-600">{historyActions.prevention}</p>
                 </div>
-
                 <div className="relative p-8 bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[2.8rem] shadow-xl overflow-hidden">
                   <div className="flex items-center gap-2 mb-3 relative z-10">
-                    <Info size={16} className="text-amber-400" />
+                    <span className="text-amber-400"><Info size={16} /></span>
                     <p className="font-black text-white/60 text-[10px] uppercase tracking-widest">Recommandation Expert</p>
                   </div>
                   <p className="text-lg text-white font-serif italic leading-relaxed relative z-10">
@@ -703,7 +734,6 @@ const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
                   <Sparkles className="absolute -bottom-4 -right-4 text-white/5 w-24 h-24" />
                 </div>
               </div>
-
               <button 
                 onClick={() => setHistoryActions(null)} 
                 className="w-full py-6 bg-[#1A2E26] text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] shadow-xl hover:bg-emerald-950 active:scale-95 transition-all"
