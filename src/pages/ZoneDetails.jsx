@@ -21,8 +21,8 @@ export default function ZoneDetails({ zone, user, zoneCultures, setZoneCultures,
     "Céréales": { icon: "🌾", list: ["Mil", "Riz", "Maïs", "Sorgho", "Fonio", "Blé", "Orge"], accent: "amber" },
     "Légumineuses": { icon: "🫘", list: ["Arachide", "Niébé", "Pois d'Angole", "Soja", "Pois Bambara"], accent: "orange" },
     "Tubercules": { icon: "🥔", list: ["Manioc", "Patate douce", "Igname"], accent: "yellow" },
-    "Légumes": { icon: "🍅", list: ["Oignon", "Tomate", "Gombo", "Chou", "Laitue", "Pastèque"], accent: "rose" },
-    "Fruits": { icon: "🍉", list: ["Mangue", "Banane", "Papaye", "Fraise", "Ananas", "Avocat", "Goyave", "Citron"], accent: "pink" },
+    "Légumes": { icon: "🍅", list: ["Oignon", "Tomate", "Gombo", "Chou", "Laitue"], accent: "rose" },
+    "Fruits": { icon: "🍉", list: ["Mangue", "Banane", "Papaye", "Fraise", "Ananas", "Avocat", "Goyave", "Citron", "Pastèque"], accent: "pink" },
     "Rente & Épices": { icon: "🌿", list: ["Coton", "Anacardier", "Canne à sucre", "Sésame", "Bissap", "Gingembre", "Curcuma"], accent: "emerald" },
     "Fourrages": { icon: "🌱", list: ["Brachiaria", "Panicum", "Neem", "Moringa"], accent: "green" }
   }
