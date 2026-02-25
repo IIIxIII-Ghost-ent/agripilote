@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { 
   MapPin, Calendar, Camera, Users, 
   ShoppingBag, Wallet, CloudSun, Bell,
@@ -10,9 +10,13 @@ import {
 export default function Landing() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const iosSectionRef = useRef(null);
+  const [isIos, setIsIos] = useState(false);
 
   useEffect(() => {
+    // Détection iOS
+    const isIosDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    setIsIos(isIosDevice);
+
     const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -22,16 +26,12 @@ export default function Landing() {
   }, []);
 
   const handleInstall = async () => {
-    // Vérification si c'est un iPhone/iPad
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-
     if (deferredPrompt) {
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       setDeferredPrompt(null);
-    } else if (isIOS) {
-      // Si iOS, on scrolle vers la section d'explication
-      iosSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else if (isIos) {
+      alert("Sur iPhone : Appuyez sur le bouton 'Partager' en bas de Safari, puis sur 'Sur l'écran d'accueil'.");
     } else {
       alert("Sur PC : cliquez sur l'icône d'installation dans la barre d'adresse ou dans le menu du navigateur.");
     }
@@ -146,55 +146,17 @@ export default function Landing() {
               Le Marché
             </Link>
 
+            {/* BOUTON ADAPTATIF IPHONE / AUTRE */}
             <button
               onClick={handleInstall}
               className="bg-white/90 backdrop-blur-sm border-2 border-[#E8E2D9] text-[#1A2E26] px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest hover:bg-white transition flex items-center justify-center gap-3 shadow-sm active:scale-95"
             >
               <div className="flex items-center gap-1.5 opacity-80">
-                <Monitor size={18} />
-                <Smartphone size={18} />
+                {isIos ? <Share size={18} className="text-blue-500" /> : <><Monitor size={18} /><Smartphone size={18} /></>}
               </div>
-              Installer
+              {isIos ? "Installer sur iPhone" : "Installer l'App"}
             </button>
           </div>
-        </div>
-      </section>
-
-      {/* SECTION IPHONE Améliorée (Utilisée par handleInstall pour iPhone) */}
-      <section ref={iosSectionRef} className="max-w-4xl mx-auto px-6 mb-20 scroll-mt-24">
-        <div className="bg-white rounded-[2.5rem] p-2 border border-[#E8E2D9] shadow-xl overflow-hidden">
-            <div className="bg-amber-50/40 rounded-[2.3rem] p-8 md:p-10 flex flex-col md:flex-row items-center gap-10">
-                <div className="relative flex-shrink-0">
-                    <div className="bg-white w-24 h-24 rounded-3xl shadow-2xl flex items-center justify-center text-blue-500 border border-amber-100">
-                        <Share size={40} className="animate-bounce" />
-                    </div>
-                    <div className="absolute -bottom-2 -right-2 bg-emerald-600 text-white p-2.5 rounded-xl shadow-lg border-2 border-white">
-                        <PlusSquare size={24} />
-                    </div>
-                </div>
-                
-                <div className="flex-grow space-y-6">
-                    <div>
-                        <h4 className="font-serif text-3xl font-bold italic mb-2 text-[#1A2E26]">Sur iPhone ?</h4>
-                        <p className="text-slate-600 font-bold text-sm">Suivez ces deux étapes rapides pour installer l'application :</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="flex items-start gap-4 bg-white/60 p-4 rounded-2xl border border-white">
-                            <span className="flex-shrink-0 w-8 h-8 bg-amber-200 text-amber-900 rounded-full flex items-center justify-center font-black text-xs">1</span>
-                            <p className="text-xs font-black uppercase tracking-wider text-slate-700 leading-relaxed">
-                                Cliquez sur <span className="inline-flex items-center gap-1 text-blue-600 bg-blue-50 px-2 py-0.5 rounded-md"><Share size={12}/> Partager</span> dans Safari
-                            </p>
-                        </div>
-                        <div className="flex items-start gap-4 bg-white/60 p-4 rounded-2xl border border-white">
-                            <span className="flex-shrink-0 w-8 h-8 bg-emerald-200 text-emerald-900 rounded-full flex items-center justify-center font-black text-xs">2</span>
-                            <p className="text-xs font-black uppercase tracking-wider text-slate-700 leading-relaxed">
-                                Sélectionnez <span className="inline-flex items-center gap-1 text-white bg-[#1A2E26] px-2 py-0.5 rounded-md"><PlusSquare size={12}/> Sur l'écran d'accueil</span>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
         </div>
       </section>
 
