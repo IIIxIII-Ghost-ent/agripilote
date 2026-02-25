@@ -233,8 +233,9 @@ const confirmDeleteZone = async () => {
               <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400">Géométrie du Domaine</span>
               <div className="h-1 w-6 bg-amber-400 rounded-full" />
             </div>
-            <h1 className="text-3xl font-serif font-medium leading-tight px-4 truncate">{parcelle.nom}</h1>
-            <div className="flex items-center justify-center gap-2">
+<h1 className="text-2xl md:text-3xl font-serif font-medium leading-snug px-4 break-words">
+  {parcelle.nom}
+</h1>            <div className="flex items-center justify-center gap-2">
                 <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
                 <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">
                   {isSyncing ? 'Synchronisation des données' : 'Données à jour'}
