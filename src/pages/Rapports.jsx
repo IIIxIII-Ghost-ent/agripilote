@@ -21,16 +21,24 @@ import {
   Receipt,
   Map as MapIcon,
   HelpCircle,
-  Info
+  Trash2,
+  Edit3,
+  Sprout,
+  FlaskConical,
+  ShieldCheck,
+  HardHat,
+  Tractor,
+  Package
 } from 'lucide-react'
 
+// Mise à jour des catégories avec des composants d'icônes au lieu d'emojis
 const EXPENSE_CATEGORIES = [
-  { id: 'semences', label: 'Semences', emoji: '🌱' },
-  { id: 'engrais', label: 'Engrais', emoji: '🧪' },
-  { id: 'traitement', label: 'Traitement', emoji: '🛡️' },
-  { id: 'main_oeuvre', label: 'Main d’œuvre', emoji: '👷' },
-  { id: 'equipement', label: 'Équipement', emoji: '🚜' },
-  { id: 'autre', label: 'Autre', emoji: '📦' }
+  { id: 'semences', label: 'Semences', icon: Sprout, color: 'text-emerald-500' },
+  { id: 'engrais', label: 'Engrais', icon: FlaskConical, color: 'text-blue-500' },
+  { id: 'traitement', label: 'Traitement', icon: ShieldCheck, color: 'text-purple-500' },
+  { id: 'main_oeuvre', label: 'Main d’œuvre', icon: HardHat, color: 'text-amber-600' },
+  { id: 'equipement', label: 'Équipement', icon: Tractor, color: 'text-slate-600' },
+  { id: 'autre', label: 'Autre', icon: Package, color: 'text-gray-400' }
 ]
 
 export default function Rapports({ user, setStep, parcelles = [] }) {
@@ -41,6 +49,7 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
   
   const [showExpenseForm, setShowExpenseForm] = useState(false)
   const [showRevenueForm, setShowRevenueForm] = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
   const [formError, setFormError] = useState(null)
   const [showGuide, setShowGuide] = useState(false)
 
@@ -78,31 +87,72 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
     loadData()
   }, [user])
 
+  const deleteItem = async (id, type) => {
+    if (!confirm("Voulez-vous vraiment supprimer cette opération ?")) return;
+    const table = type === 'revenue' ? 'revenus_campagne' : 'depenses_campagne';
+    try {
+      if (type === 'revenue') {
+        await db.revenus_campagne.delete(id);
+        setRevenus(prev => prev.filter(item => item.id !== id));
+      } else {
+        await db.depenses_campagne.delete(id);
+        setDepenses(prev => prev.filter(item => item.id !== id));
+      }
+      if (navigator.onLine) {
+        await supabase.from(table).delete().eq('id', id);
+      }
+    } catch (err) { console.error(err) }
+  }
+
+  const startEdit = (item) => {
+    setEditingItem(item);
+    if (item.source) {
+      setRevenueForm({
+        parcelle_id: item.parcelle_id,
+        quantite: item.source.match(/\((.*)kg\)/)?.[1] || '',
+        prix: (item.montant / (parseFloat(item.source.match(/\((.*)kg\)/)?.[1]) || 1)).toString()
+      });
+      setShowRevenueForm(true);
+      setShowExpenseForm(false);
+    } else {
+      setExpenseForm({
+        type: item.type,
+        parcelle_id: item.parcelle_id,
+        montant: item.montant.toString(),
+        description: item.description || ''
+      });
+      setShowExpenseForm(true);
+      setShowRevenueForm(false);
+    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   const addExpense = async () => {
     if (!expenseForm.parcelle_id) return setFormError('Veuillez sélectionner une parcelle');
     if (!expenseForm.montant) return setFormError('Veuillez saisir un montant');
     
     setFormError(null)
+    const docId = editingItem ? editingItem.id : crypto.randomUUID();
     const newDoc = {
-      id: crypto.randomUUID(),
+      id: docId,
       user_id: user.id,
       parcelle_id: expenseForm.parcelle_id,
       type: expenseForm.type,
       montant: Number(expenseForm.montant),
       description: expenseForm.description,
-      created_at: new Date().toISOString(),
+      created_at: editingItem ? editingItem.created_at : new Date().toISOString(),
       synced: 0 
     }
     try {
-      await db.depenses_campagne.add(newDoc)
-      setDepenses(prev => [newDoc, ...prev])
+      await db.depenses_campagne.put(newDoc)
+      setDepenses(prev => editingItem ? prev.map(x => x.id === docId ? newDoc : x) : [newDoc, ...prev])
       if (navigator.onLine) {
         const { synced, ...toSupabase } = newDoc
-        const { error } = await supabase.from('depenses_campagne').insert([toSupabase])
+        const { error } = await supabase.from('depenses_campagne').upsert([toSupabase])
         if (!error) await db.depenses_campagne.update(newDoc.id, { synced: 1 })
       }
       setExpenseForm({ type: 'semences', parcelle_id: '', montant: '', description: '' })
-      setShowExpenseForm(false)
+      setShowExpenseForm(false); setEditingItem(null);
     } catch (err) { console.error(err) }
   }
 
@@ -111,26 +161,27 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
     if (!revenueForm.quantite || !revenueForm.prix) return setFormError('Saisissez la quantité et le prix');
 
     setFormError(null)
+    const docId = editingItem ? editingItem.id : crypto.randomUUID();
     const montantTotal = Number(revenueForm.quantite) * Number(revenueForm.prix)
     const newDoc = {
-      id: crypto.randomUUID(),
+      id: docId,
       user_id: user.id,
       parcelle_id: revenueForm.parcelle_id,
       source: `Vente (${revenueForm.quantite}kg)`,
       montant: montantTotal,
-      created_at: new Date().toISOString(),
+      created_at: editingItem ? editingItem.created_at : new Date().toISOString(),
       synced: 0
     }
     try {
-      await db.revenus_campagne.add(newDoc)
-      setRevenus(prev => [newDoc, ...prev])
+      await db.revenus_campagne.put(newDoc)
+      setRevenus(prev => editingItem ? prev.map(x => x.id === docId ? newDoc : x) : [newDoc, ...prev])
       if (navigator.onLine) {
         const { synced, ...toSupabase } = newDoc
-        const { error } = await supabase.from('revenus_campagne').insert([toSupabase])
+        const { error } = await supabase.from('revenus_campagne').upsert([toSupabase])
         if (!error) await db.revenus_campagne.update(newDoc.id, { synced: 1 })
       }
       setRevenueForm({ parcelle_id: '', quantite: '', prix: '' })
-      setShowRevenueForm(false)
+      setShowRevenueForm(false); setEditingItem(null);
     } catch (err) { console.error(err) }
   }
 
@@ -249,35 +300,28 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
 
         {/* RÉSUMÉ DYNAMIQUE */}
         <div className="relative grid grid-cols-2 gap-4">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md rounded-[2.5rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300 border-2 border-amber-400/50">
-              <TrendingUp className="text-amber-400 mb-2" size={32} />
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Santé Financière</p>
-              <p className="text-sm font-serif italic text-white max-w-[240px]">Suivez votre bénéfice net en temps réel. Le vert indique un profit, le orange une perte.</p>
-            </div>
-          )}
           <div className={`p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden group transition-all duration-500 col-span-2 ${marge >= 0 ? 'bg-emerald-600' : 'bg-orange-700'}`}>
               <div className="relative z-10 flex flex-col items-center">
-                 <p className="text-[10px] font-black opacity-60 uppercase tracking-[0.3em]">Solde de Campagne</p>
-                 <div className="flex items-baseline gap-1 mt-1">
-                   <span className="text-4xl font-black tracking-tighter">{formatMoney(marge)}</span>
-                 </div>
+                  <p className="text-[10px] font-black opacity-60 uppercase tracking-[0.3em]">Solde de Campagne</p>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-4xl font-black tracking-tighter">{formatMoney(marge)}</span>
+                  </div>
               </div>
               <Wallet className="absolute -right-4 -bottom-4 opacity-10 group-hover:scale-110 transition-transform duration-700" size={100} />
           </div>
           
           <div className="bg-white p-6 rounded-[2.5rem] border border-[#E8E2D9] text-[#1A2E26] shadow-sm relative overflow-hidden group">
               <div className="relative z-10">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Entrées</p>
-                 <p className="text-xl font-black mt-1 text-emerald-600">+{formatMoney(totalRevenus)}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Entrées</p>
+                  <p className="text-xl font-black mt-1 text-emerald-600">+{formatMoney(totalRevenus)}</p>
               </div>
               <TrendingUp className="absolute -right-2 -bottom-2 opacity-5" size={60} />
           </div>
 
           <div className="bg-white p-6 rounded-[2.5rem] border border-[#E8E2D9] text-[#1A2E26] shadow-sm relative overflow-hidden group">
               <div className="relative z-10">
-                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sorties</p>
-                 <p className="text-xl font-black mt-1 text-orange-600">-{formatMoney(totalDepenses)}</p>
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Sorties</p>
+                  <p className="text-xl font-black mt-1 text-orange-600">-{formatMoney(totalDepenses)}</p>
               </div>
               <TrendingDown className="absolute -right-2 -bottom-2 opacity-5" size={60} />
           </div>
@@ -312,24 +356,18 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
 
         {/* ACTIONS PRINCIPALES */}
         <div className="relative space-y-4">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-emerald-900/95 backdrop-blur-md rounded-[2.5rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300 border-2 border-amber-400/50">
-              <Plus className="text-amber-400 mb-2" size={32} />
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Nouvelle Saisie</p>
-              <p className="text-sm font-serif italic text-white max-w-[240px]">Ajoutez vos achats ou vos ventes ici. Générez ensuite un PDF pro pour vos archives.</p>
-            </div>
-          )}
+          
           <button 
-            onClick={() => { setShowExpenseForm(!showExpenseForm); setShowRevenueForm(false); setFormError(null); }}
+            onClick={() => { setShowExpenseForm(!showExpenseForm); setShowRevenueForm(false); setFormError(null); setEditingItem(null); }}
             className={`w-full p-4 rounded-[2rem] border transition-all flex items-center justify-between group active:scale-[0.98] ${showExpenseForm ? 'bg-orange-50 border-orange-200 shadow-inner' : 'bg-white border-[#E8E2D9] shadow-sm'}`}
           >
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${showExpenseForm ? 'bg-orange-600 text-white' : 'bg-orange-50 text-orange-600'}`}>
-                <TrendingDown size={20} />
+                {editingItem ? <Edit3 size={20}/> : <TrendingDown size={20} />}
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-[#1A2E26]">Nouvelle Dépense</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enregistrer un achat</p>
+                <h3 className="text-lg font-bold text-[#1A2E26]">{editingItem ? "Modifier la Dépense" : "Nouvelle Dépense"}</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingItem ? "Mise à jour d'un achat" : "Enregistrer un achat"}</p>
               </div>
             </div>
             <ChevronRight className={`text-slate-300 transition-transform ${showExpenseForm ? 'rotate-90' : ''}`} size={20} />
@@ -337,48 +375,52 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
 
           {showExpenseForm && (
             <div className="bg-white p-8 rounded-[3rem] border-2 border-orange-100 shadow-xl space-y-6 animate-in slide-in-from-top-4 duration-300">
-               <div className="grid grid-cols-3 gap-2">
-                 {EXPENSE_CATEGORIES.map(c => (
-                   <button key={c.id} onClick={() => setExpenseForm(f => ({ ...f, type: c.id }))} className={`py-4 rounded-2xl text-[9px] font-black uppercase transition-all flex flex-col items-center gap-1 ${expenseForm.type === c.id ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
-                     <span className="text-lg">{c.emoji}</span>
-                     {c.label}
-                   </button>
-                 ))}
-               </div>
-               <div className="space-y-4">
-                  <label className="text-[10px] font-black uppercase text-slate-400 px-1">1. Parcelle concernée</label>
-                  <div className={`grid grid-cols-2 gap-2 p-1 ${!expenseForm.parcelle_id && formError ? 'animate-shake' : ''}`}>
-                    {parcelles.map(p => (
-                      <button 
-                        key={p.id} 
-                        onClick={() => setExpenseForm(f => ({ ...f, parcelle_id: p.id }))} 
-                        className={`p-3 rounded-2xl text-[10px] font-bold border transition-all flex items-center gap-3 relative overflow-hidden ${expenseForm.parcelle_id === p.id ? 'bg-[#1A2E26] border-[#1A2E26] text-white shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100'}`}
-                      >
-                        <MapPin size={14} className={expenseForm.parcelle_id === p.id ? 'text-amber-400' : 'text-slate-300'} />
-                        <span className="truncate">{p.nom}</span>
-                        {expenseForm.parcelle_id === p.id && <CheckCircle2 size={12} className="absolute right-2 text-emerald-400" />}
-                      </button>
-                    ))}
-                  </div>
-                  <input type="number" placeholder="Montant en FCFA *" value={expenseForm.montant} onChange={e => setExpenseForm(f => ({ ...f, montant: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-5 text-2xl font-black outline-none focus:ring-2 ring-orange-100" />
-                  <textarea placeholder="Petit mémo (facultatif)" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-xs font-bold outline-none ring-1 ring-slate-100 h-20 resize-none" />
-                  {formError && <p className="text-orange-600 text-[10px] font-black uppercase text-center font-bold tracking-tighter">{formError}</p>}
-               </div>
-               <button onClick={addExpense} className="w-full bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-lg active:scale-95 transition-all">Enregistrer la dépense</button>
+                <div className="grid grid-cols-3 gap-2">
+                  {EXPENSE_CATEGORIES.map(c => (
+                    <button key={c.id} onClick={() => setExpenseForm(f => ({ ...f, type: c.id }))} className={`py-4 rounded-2xl text-[9px] font-black uppercase transition-all flex flex-col items-center gap-2 ${expenseForm.type === c.id ? 'bg-orange-600 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-slate-100'}`}>
+                      <c.icon size={20} className={expenseForm.type === c.id ? 'text-white' : c.color} />
+                      {c.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="space-y-4">
+                   <label className="text-[10px] font-black uppercase text-slate-400 px-1">1. Parcelle concernée</label>
+                   <div className="grid grid-cols-2 gap-2 p-1">
+                     {parcelles.map(p => (
+                       <button 
+                         key={p.id} 
+                         onClick={() => setExpenseForm(f => ({ ...f, parcelle_id: p.id }))} 
+                         className={`p-3 rounded-2xl text-[10px] font-bold border transition-all flex items-center gap-3 relative overflow-hidden ${expenseForm.parcelle_id === p.id ? 'bg-[#1A2E26] border-[#1A2E26] text-white shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100'}`}
+                       >
+                         <MapPin size={14} className={expenseForm.parcelle_id === p.id ? 'text-amber-400' : 'text-slate-300'} />
+                         <span className="truncate">{p.nom}</span>
+                       </button>
+                     ))}
+                   </div>
+                   <input type="number" placeholder="Montant en FCFA *" value={expenseForm.montant} onChange={e => setExpenseForm(f => ({ ...f, montant: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-5 text-2xl font-black outline-none focus:ring-2 ring-orange-100" />
+                   <textarea placeholder="Petit mémo (facultatif)" value={expenseForm.description} onChange={e => setExpenseForm(f => ({ ...f, description: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-xs font-bold outline-none ring-1 ring-slate-100 h-20 resize-none" />
+                   {formError && <p className="text-orange-600 text-[10px] font-black uppercase text-center font-bold tracking-tighter">{formError}</p>}
+                </div>
+                <div className="flex gap-2">
+                  {editingItem && <button onClick={() => {setShowExpenseForm(false); setEditingItem(null)}} className="flex-1 bg-slate-100 text-slate-500 py-5 rounded-2xl font-black uppercase text-xs">Annuler</button>}
+                  <button onClick={addExpense} className="flex-[2] bg-orange-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-lg active:scale-95 transition-all">
+                    {editingItem ? "Mettre à jour" : "Enregistrer la dépense"}
+                  </button>
+                </div>
             </div>
           )}
 
           <button 
-            onClick={() => { setShowRevenueForm(!showRevenueForm); setShowExpenseForm(false); setFormError(null); }}
+            onClick={() => { setShowRevenueForm(!showRevenueForm); setShowExpenseForm(false); setFormError(null); setEditingItem(null); }}
             className={`w-full p-4 rounded-[2rem] border transition-all flex items-center justify-between group active:scale-[0.98] ${showRevenueForm ? 'bg-emerald-50 border-emerald-200 shadow-inner' : 'bg-white border-[#E8E2D9] shadow-sm'}`}
           >
             <div className="flex items-center gap-4">
               <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${showRevenueForm ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600'}`}>
-                <TrendingUp size={20} />
+                {editingItem ? <Edit3 size={20}/> : <TrendingUp size={20} />}
               </div>
               <div className="text-left">
-                <h3 className="text-lg font-bold text-[#1A2E26]">Vente de Récolte</h3>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Enregistrer un gain</p>
+                <h3 className="text-lg font-bold text-[#1A2E26]">{editingItem ? "Modifier la Vente" : "Vente de Récolte"}</h3>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{editingItem ? "Mise à jour d'un gain" : "Enregistrer un gain"}</p>
               </div>
             </div>
             <ChevronRight className={`text-slate-300 transition-transform ${showRevenueForm ? 'rotate-90' : ''}`} size={20} />
@@ -386,30 +428,32 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
 
           {showRevenueForm && (
             <div className="bg-white p-8 rounded-[3rem] border-2 border-emerald-100 shadow-xl space-y-6 animate-in slide-in-from-top-4 duration-300">
-               <div className="space-y-4">
-                  <label className="text-[10px] font-black uppercase text-slate-400 px-1">1. Parcelle de provenance</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {parcelles.map(p => (
-                      <button 
-                        key={p.id} 
-                        onClick={() => setRevenueForm(f => ({ ...f, parcelle_id: p.id }))} 
-                        className={`p-3 rounded-2xl text-[10px] font-bold border transition-all flex items-center gap-3 relative ${revenueForm.parcelle_id === p.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100'}`}
-                      >
-                        <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${revenueForm.parcelle_id === p.id ? 'bg-white/20' : 'bg-emerald-50'}`}>
-                          <span className="text-[12px]">🚜</span>
-                        </div>
-                        <span className="truncate">{p.nom}</span>
-                        {revenueForm.parcelle_id === p.id && <CheckCircle2 size={12} className="absolute right-2 text-white" />}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <input type="number" placeholder="Kilos (kg) *" value={revenueForm.quantite} onChange={e => setRevenueForm(f => ({ ...f, quantite: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-lg font-black outline-none ring-1 ring-slate-100" />
-                     <input type="number" placeholder="Prix / Kg *" value={revenueForm.prix} onChange={e => setRevenueForm(f => ({ ...f, prix: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-lg font-black outline-none ring-1 ring-slate-100" />
-                  </div>
-                  {formError && <p className="text-emerald-600 text-[10px] font-black uppercase text-center font-bold">{formError}</p>}
-               </div>
-               <button onClick={addRevenue} className="w-full bg-emerald-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-lg active:scale-95 transition-all">Enregistrer le revenu</button>
+                <div className="space-y-4">
+                   <label className="text-[10px] font-black uppercase text-slate-400 px-1">1. Parcelle de provenance</label>
+                   <div className="grid grid-cols-2 gap-2">
+                     {parcelles.map(p => (
+                       <button 
+                         key={p.id} 
+                         onClick={() => setRevenueForm(f => ({ ...f, parcelle_id: p.id }))} 
+                         className={`p-3 rounded-2xl text-[10px] font-bold border transition-all flex items-center gap-3 relative ${revenueForm.parcelle_id === p.id ? 'bg-emerald-600 border-emerald-600 text-white shadow-md' : 'bg-slate-50 text-slate-500 border-slate-100'}`}
+                       >
+                         <MapPin size={14} className={revenueForm.parcelle_id === p.id ? 'text-white' : 'text-slate-300'} />
+                         <span className="truncate">{p.nom}</span>
+                       </button>
+                     ))}
+                   </div>
+                   <div className="grid grid-cols-2 gap-4">
+                      <input type="number" placeholder="Kilos (kg) *" value={revenueForm.quantite} onChange={e => setRevenueForm(f => ({ ...f, quantite: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-lg font-black outline-none ring-1 ring-slate-100" />
+                      <input type="number" placeholder="Prix / Kg *" value={revenueForm.prix} onChange={e => setRevenueForm(f => ({ ...f, prix: e.target.value }))} className="w-full bg-slate-50 border-none rounded-2xl px-5 py-4 text-lg font-black outline-none ring-1 ring-slate-100" />
+                   </div>
+                   {formError && <p className="text-emerald-600 text-[10px] font-black uppercase text-center font-bold">{formError}</p>}
+                </div>
+                <div className="flex gap-2">
+                  {editingItem && <button onClick={() => {setShowRevenueForm(false); setEditingItem(null)}} className="flex-1 bg-slate-100 text-slate-500 py-5 rounded-2xl font-black uppercase text-xs">Annuler</button>}
+                  <button onClick={addRevenue} className="flex-[2] bg-emerald-600 text-white py-5 rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-lg active:scale-95 transition-all">
+                    {editingItem ? "Mettre à jour" : "Enregistrer le revenu"}
+                  </button>
+                </div>
             </div>
           )}
 
@@ -417,20 +461,13 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
             onClick={generatePDF}
             className="w-full bg-[#1A2E26] p-5 rounded-[2rem] text-white flex items-center justify-center gap-3 shadow-xl active:scale-95 transition-all group"
           >
-            <Download size={18} className="text-amber-400 group-hover:bounce" />
+            <Download size={18} className="text-amber-400" />
             <span className="text-xs font-black uppercase tracking-[0.2em]">Télécharger le Rapport PDF</span>
           </button>
         </div>
 
-        {/* HISTORIQUE */}
+        {/* HISTORIQUE AVEC ACTIONS DE MODIF/SUPPR */}
         <section className="relative space-y-4">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-slate-900/95 backdrop-blur-md rounded-[2rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300 border-2 border-amber-400/50">
-              <Clock className="text-amber-400 mb-2" size={32} />
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Journal de Bord</p>
-              <p className="text-sm font-serif italic text-white max-w-[240px]">Retrouvez ici vos 10 dernières transactions pour un contrôle rapide.</p>
-            </div>
-          )}
           <div className="flex items-center gap-2 px-1">
              <Clock size={14} className="text-slate-400" />
              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Dernières opérations</span>
@@ -438,41 +475,52 @@ export default function Rapports({ user, setStep, parcelles = [] }) {
           
           {[...revenusFiltres, ...depensesFiltrees].length === 0 ? (
             <div className="bg-white rounded-[3rem] p-12 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-300 mb-4">
-                <Receipt size={32} />
-              </div>
+              <Receipt size={32} className="text-emerald-300 mb-4" />
               <p className="text-sm font-medium text-slate-400 font-serif italic">Aucune transaction enregistrée.</p>
             </div>
           ) : (
             <div className="space-y-3">
               {[...revenusFiltres, ...depensesFiltrees]
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-                .slice(0, 10)
-                .map(item => (
-                <div key={item.id} className="bg-white rounded-[2rem] p-5 border border-[#E8E2D9] flex items-center gap-4 group">
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 ${item.source ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
-                    {item.source ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h4 className="font-bold text-[#1A2E26] truncate">
-                      {item.source ? 'Vente de récolte' : EXPENSE_CATEGORIES.find(c => c.id === item.type)?.label || 'Dépense'}
-                    </h4>
-                    <div className="flex items-center gap-3">
-                       <div className="flex items-center gap-1 text-[9px] font-black text-slate-400 uppercase tracking-tighter">
-                          <MapPin size={8} />
-                          {parcelles.find(p => p.id === item.parcelle_id)?.nom || 'Général'}
-                       </div>
-                       <div className="flex items-center gap-1 text-[9px] font-bold text-slate-300 uppercase">
-                          <Calendar size={8} />
-                          {new Date(item.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
-                       </div>
+                .slice(0, 15)
+                .map(item => {
+                  const category = EXPENSE_CATEGORIES.find(c => c.id === item.type);
+                  return (
+                    <div key={item.id} className="bg-white rounded-[2rem] p-4 border border-[#E8E2D9] flex items-center gap-3 group relative overflow-hidden">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${item.source ? 'bg-emerald-50 text-emerald-600' : 'bg-orange-50 text-orange-600'}`}>
+                        {item.source ? <TrendingUp size={18} /> : (category ? <category.icon size={18} /> : <TrendingDown size={18} />)}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-bold text-[#1A2E26] text-sm truncate">
+                          {item.source ? 'Vente de récolte' : category?.label || 'Dépense'}
+                        </h4>
+                        <div className="flex items-center gap-2">
+                           <span className="text-[8px] font-black text-slate-400 uppercase tracking-tighter flex items-center gap-0.5">
+                              <MapPin size={8} /> {parcelles.find(p => p.id === item.parcelle_id)?.nom || 'Général'}
+                           </span>
+                           <span className="text-[8px] font-bold text-slate-300 uppercase flex items-center gap-0.5">
+                              <Calendar size={8} /> {new Date(item.created_at).toLocaleDateString('fr-FR', { day: '2-digit', month: 'short' })}
+                           </span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col items-end gap-1">
+                        <div className={`text-xs font-black ${item.source ? 'text-emerald-600' : 'text-orange-600'}`}>
+                          {item.source ? '+' : '-'}{formatMoney(item.montant)}
+                        </div>
+                        <div className="flex items-center gap-2">
+                           <button onClick={() => startEdit(item)} className="p-1.5 text-slate-300 hover:text-emerald-600 transition-colors">
+                              <Edit3 size={14} />
+                           </button>
+                           <button onClick={() => deleteItem(item.id, item.source ? 'revenue' : 'expense')} className="p-1.5 text-slate-300 hover:text-rose-600 transition-colors">
+                              <Trash2 size={14} />
+                           </button>
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                  <div className={`text-sm font-black ${item.source ? 'text-emerald-600' : 'text-orange-600'}`}>
-                    {item.source ? '+' : '-'}{formatMoney(item.montant)}
-                  </div>
-                </div>
-              ))}
+                  );
+                })}
             </div>
           )}
         </section>

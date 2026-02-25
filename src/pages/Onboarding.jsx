@@ -11,11 +11,12 @@ import {
 
 export default function OnboardingOriginal({ onFinish }) {
   return (
-    <div className="min-h-screen bg-[#FDFCF9] font-sans text-[#1A2E26] flex flex-col items-center overflow-hidden">
+    /* CONTENEUR FIXE : Empêche le scroll, occupe tout l'écran, centré */
+    <div className="fixed inset-0 bg-[#FDFCF9] font-sans text-[#1A2E26] flex flex-col items-center justify-between overflow-hidden">
       
       {/* MOTIF MANJAK IDENTIQUE AU DASHBOARD */}
       <div 
-        className="fixed inset-0 opacity-[0.03] pointer-events-none" 
+        className="absolute inset-0 opacity-[0.03] pointer-events-none" 
         style={{ 
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")`,
           backgroundSize: '80px 80px'
@@ -23,7 +24,7 @@ export default function OnboardingOriginal({ onFinish }) {
       />
 
       {/* 1. TOP : Header Style Dashboard */}
-      <div className="relative z-10 w-full p-6 pt-12 max-w-2xl">
+      <div className="relative z-10 w-full p-6 pt-10 max-w-2xl">
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-10 text-white shadow-xl text-center">
           <div className="relative z-10 space-y-3">
             <div className="flex justify-center items-center gap-2 mb-2">
@@ -41,12 +42,12 @@ export default function OnboardingOriginal({ onFinish }) {
       </div>
 
       {/* 2. CENTRE : La Roue des Outils (Harmonisée) */}
-      <div className="flex-1 relative w-full aspect-square max-w-[380px] flex items-center justify-center">
+      <div className="relative w-full aspect-square max-w-[380px] flex items-center justify-center flex-1">
         {/* Cercles de croissance (style Dashboard) */}
         <div className="absolute w-72 h-72 border-2 border-emerald-100/50 rounded-full animate-[ping_4s_infinite]" />
         <div className="absolute w-56 h-56 bg-emerald-50/50 rounded-full blur-xl" />
 
-        {/* Cœur du Soleil - LOGO REMPLACÉ ICI */}
+        {/* Cœur du Soleil - LOGO */}
         <div className="relative z-20 w-32 h-32 bg-[#1A2E26] rounded-[2.5rem] flex items-center justify-center shadow-2xl border-4 border-[#FDFCF9] group overflow-hidden">
             <img 
               src="/assets/logo2.png" 
@@ -89,7 +90,7 @@ export default function OnboardingOriginal({ onFinish }) {
       </div>
 
       {/* 3. BOTTOM : L'action instinctive */}
-      <div className="relative z-10 w-full px-8 pb-12 space-y-8 max-w-2xl">
+      <div className="relative z-10 w-full px-8 pb-10 space-y-6 max-w-2xl">
         <div className="flex justify-center gap-10 items-center">
             <div className="flex flex-col items-center gap-2 opacity-40">
                 <UserCheck size={20} />

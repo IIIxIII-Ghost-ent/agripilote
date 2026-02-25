@@ -27,8 +27,9 @@ export default function ParcelleDetails({
   const [zones, setZones] = useState([])
   const [loading, setLoading] = useState(true)
   const [isSyncing, setIsSyncing] = useState(false)
-  const [showGuide, setShowGuide] = useState(false) // Logique Guide
-
+  const [showGuide, setShowGuide] = useState(false)
+const [zoneToDelete, setZoneToDelete] = useState(null)
+const [offlineDeleteError, setOfflineDeleteError] = useState(false)
   // --- LOGIQUE D'AFFICHAGE DES ICONES SVG ---
   const getCropStyle = (cultureNom) => {
     if (!cultureNom) return { icon: '/assets/cultures/default.svg', color: 'bg-emerald-50' };
@@ -59,12 +60,20 @@ export default function ParcelleDetails({
     if (!parcelle?.id) return
     setLoading(true)
     try {
-      const localZones = await db.zones.where('parcelle_id').equals(parcelle.id).toArray()
-      
+const localZones = await db.zones
+  .where('parcelle_id')
+  .equals(parcelle.id)
+  .and(z => z.synced !== -1)
+  .toArray()
+
       const enrichWithCulture = async (zonesList) => {
         return await Promise.all(zonesList.map(async (z) => {
-          const zc = await db.zone_cultures.where('zone_id').equals(z.id).first();
-          if (zc) {
+const zc = await db.zone_cultures
+  .where('zone_id')
+  .equals(z.id)
+  .and(zc => zc.synced !== -1)
+  .first()
+            if (zc) {
              const cult = await db.cultures.get(zc.culture_id);
              return { ...z, culture_nom: cult?.nom };
           }
@@ -149,21 +158,37 @@ export default function ParcelleDetails({
     }
   }
 
-  const deleteZone = async (e, id) => {
-    e.stopPropagation(); 
-    if (!confirm('Supprimer cette zone définitivement ?')) return
-    
-    try {
-      await db.zones.delete(id);
-      setZones(prev => prev.filter(z => z.id !== id));
-      
-      if (navigator.onLine) {
-        await supabase.from('zones').delete().eq('id', id);
-      }
-    } catch (err) {
-      console.error("Erreur lors de la suppression:", err)
+const confirmDeleteZone = async () => {
+  // 🚫 INTERDIT OFFLINE
+  if (!navigator.onLine) {
+    setOfflineDeleteError(true)
+    setZoneToDelete(null)
+    return
+  }
+
+  if (!zoneToDelete) return
+  const zoneId = zoneToDelete
+
+  // 🔥 UI immédiate
+  setZones(prev => prev.filter(z => z.id !== zoneId))
+
+  // 🔥 OFFLINE FIRST : marquer comme supprimée
+  await db.zones.update(zoneId, { synced: -1 })
+
+  // 🔥 ONLINE → suppression réelle
+  if (navigator.onLine) {
+    const { error } = await supabase
+      .from('zones')
+      .delete()
+      .eq('id', zoneId)
+
+    if (!error) {
+      await db.zones.delete(zoneId)
     }
   }
+
+  setZoneToDelete(null)
+}
 
   const surfaceUtilisee = zones.reduce((total, z) => total + Number(z.surface), 0)
   const surfaceRestante = Math.max(0, Number(parcelle.surface) - surfaceUtilisee)
@@ -176,11 +201,10 @@ export default function ParcelleDetails({
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
-        {/* LOGIQUE BOUTON GUIDE (Même que Dashboard) */}
         <div className="flex justify-between items-center px-2">
             <div className="flex items-center gap-2">
                <MapIcon className="text-emerald-700" size={20} />
-               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Détails Parcelle</span>
+               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Fiche parcellaire</span>
             </div>
             <button 
              onClick={() => setShowGuide(!showGuide)}
@@ -191,12 +215,11 @@ export default function ParcelleDetails({
             </button>
         </div>
 
-        {/* HEADER */}
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-xl shadow-emerald-900/20">
           {showGuide && (
             <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
               <MapIcon className="text-amber-400 mb-2" size={32} />
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Identité du Champ</p>
+              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Identité de l'Unité culturale</p>
               <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Retrouvez ici le nom de votre parcelle et l'état de synchronisation avec le cloud.</p>
             </div>
           )}
@@ -214,14 +237,13 @@ export default function ParcelleDetails({
             <div className="flex items-center justify-center gap-2">
                 <div className={`w-1.5 h-1.5 rounded-full ${isSyncing ? 'bg-amber-400 animate-pulse' : 'bg-emerald-400'}`} />
                 <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">
-                  {isSyncing ? 'Synchronisation Cloud...' : 'Système à jour'}
+                  {isSyncing ? 'Synchronisation des données' : 'Données à jour'}
                 </p>
             </div>
           </div>
           <MapIcon className="absolute right-[-10px] bottom-[-10px] text-white/5 w-32 h-32 rotate-12" />
         </header>
 
-        {/* STATS */}
         <div className="grid grid-cols-2 gap-4">
           <div className="relative group">
             {showGuide && (
@@ -247,13 +269,13 @@ export default function ParcelleDetails({
             {showGuide && (
               <div className="absolute inset-0 z-20 bg-orange-800/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
                 <Sprout className="text-amber-400 mb-1" size={24} />
-                <p className="text-[10px] font-black uppercase text-amber-400">Disponible</p>
-                <p className="text-[10px] text-orange-50">Surface qu'il vous reste à allouer à des zones.</p>
+                <p className="text-[10px] font-black uppercase text-amber-400">Superficie non affectée</p>
+                <p className="text-[10px] text-orange-50">Superficie restant à affecter aux unités culturales.</p>
               </div>
             )}
             <div className={`p-6 rounded-[2.5rem] text-white shadow-lg relative overflow-hidden h-full transition-all duration-500 ${isFull ? 'bg-red-800' : 'bg-orange-600'}`}>
                 <div className="relative z-10">
-                  <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Disponible</p>
+                  <p className="text-[10px] font-black opacity-60 uppercase tracking-widest">Superficie non affectée</p>
                   <div className="flex items-baseline gap-1 mt-1">
                     <span className="text-4xl font-black tracking-tighter">{surfaceRestante.toFixed(1)}</span>
                     <span className="text-[10px] font-bold opacity-60 uppercase">HA</span>
@@ -264,13 +286,12 @@ export default function ParcelleDetails({
           </div>
         </div>
 
-        {/* AJOUT ZONE */}
         <section className="relative group">
           {showGuide && (
             <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[3rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
               <PlusCircle className="text-amber-600 mb-2" size={32} />
-              <p className="text-xs font-black uppercase text-amber-600 mb-1">Découpage</p>
-              <p className="text-sm text-slate-600 font-medium">Créez des sous-sections (zones) pour diversifier vos cultures sur une même parcelle.</p>
+              <p className="text-xs font-black uppercase text-amber-600 mb-1">Découpage cultural</p>
+              <p className="text-sm text-slate-600 font-medium">Créez des blocs culturaux pour diversifier vos cultures sur une même parcelle.</p>
             </div>
           )}
           <div className="bg-white p-8 rounded-[3rem] border border-[#E8E2D9] shadow-sm relative overflow-hidden">
@@ -280,7 +301,7 @@ export default function ParcelleDetails({
               </div>
               <div>
                 <h3 className={`text-xl font-serif font-bold transition-colors ${isFull ? 'text-red-900' : 'text-[#0A261D]'}`}>
-                  {isFull ? 'Capacité Limitée' : 'Ajouter une zone'}
+                  {isFull ? 'Capacité foncière atteinte' : 'Ajouter une unité culturale'}
                 </h3>
               </div>
             </div>
@@ -290,8 +311,8 @@ export default function ParcelleDetails({
                 <div className="w-16 h-16 bg-red-800 rounded-full flex items-center justify-center text-white mb-4 shadow-lg ring-4 ring-red-50">
                    <XCircle size={28} className="animate-pulse" />
                 </div>
-                <h4 className="text-red-900 font-black text-lg uppercase">Surface saturée</h4>
-                <p className="text-red-800/60 text-xs mt-1">Espace entièrement alloué.</p>
+                <h4 className="text-red-900 font-black text-lg uppercase">Superficie entièrement affectée</h4>
+                <p className="text-red-800/60 text-xs mt-1">Aucune superficie disponible.</p>
               </div>
             ) : (
               <div className="relative z-10 bg-[#FDFCF9] p-6 rounded-[2rem] border border-dashed border-orange-200">
@@ -301,15 +322,14 @@ export default function ParcelleDetails({
           </div>
         </section>
 
-        {/* LISTE DES ZONES */}
         <section className="space-y-6 relative">
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-emerald-600 rounded-full" />
-              <h3 className="text-xl font-serif font-bold text-[#0A261D]">Secteurs Actifs</h3>
+              <h3 className="text-xl font-serif font-bold text-[#0A261D]">Unités culturales actives</h3>
             </div>
             <span className="text-[10px] font-black text-slate-500 bg-white border border-[#E8E2D9] px-4 py-1.5 rounded-full shadow-sm uppercase tracking-widest">
-              {zones.length} Zones
+              {zones.length} Unités culturales
             </span>
           </div>
 
@@ -317,15 +337,15 @@ export default function ParcelleDetails({
             {showGuide && zones.length > 0 && (
               <div className="absolute inset-0 z-20 bg-[#FDFCF9]/90 backdrop-blur-sm rounded-[2.5rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300 border-2 border-dashed border-amber-500">
                 <Layers className="text-amber-600 mb-2" size={32} />
-                <p className="text-xs font-black uppercase text-amber-600 mb-1">Gestion des Zones</p>
-                <p className="text-sm text-slate-600 font-medium italic">Cliquez sur une zone pour voir ses détails ou changez son statut (Culture, Récolté, Repos) via les boutons.</p>
+                <p className="text-xs font-black uppercase text-amber-600 mb-1">Gérer les unités culturales</p>
+                <p className="text-sm text-slate-600 font-medium italic">Cliquez sur une unité pour voir ses détails ou changez son statut cultural (en place, achevé, jachère) via les boutons.</p>
               </div>
             )}
 
             {zones.length === 0 ? (
               <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
                 <Layers className="text-emerald-100 mb-4" size={48} />
-                <p className="text-sm font-medium text-slate-400 italic">Aucune délimitation enregistrée.</p>
+                <p className="text-sm font-medium text-slate-400 italic">Aucune unité culturale déclarée.</p>
               </div>
             ) : (
               zones.map(zone => {
@@ -338,7 +358,6 @@ export default function ParcelleDetails({
                   >
                     <div className="p-5 flex flex-col gap-4">
                       <div className="flex items-center gap-4">
-                        {/* Avatar Culture */}
                         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-50 transition-transform group-hover:scale-110 duration-500 ${style.color}`}>
                           <img 
                             src={style.icon} 
@@ -349,21 +368,38 @@ export default function ParcelleDetails({
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <h4 className={`font-bold text-lg leading-tight truncate ${zone.statut === 'annulee' ? 'line-through text-slate-400' : 'text-[#1A2E26]'}`}>
-                              {zone.nom}
-                            </h4>
-                            {zone.synced === 0 && <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2">
+                                <h4 className={`font-bold text-lg leading-tight truncate ${zone.statut === 'annulee' ? 'line-through text-slate-400' : 'text-[#1A2E26]'}`}>
+                                {zone.nom}
+                                </h4>
+                                {zone.synced === 0 && <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
+                            </div>
+                            
+                            {/* BOUTON SUPPRESSION AJOUTÉ ICI */}
+                           <button
+  onClick={(e) => {
+    e.stopPropagation()
+
+    if (!navigator.onLine) {
+      setOfflineDeleteError(true)
+      return
+    }
+
+    setZoneToDelete(zone.id)
+  }}
+  className="p-2 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all active:scale-90"
+>
+  <Trash2 size={18} />
+</button>
                           </div>
                           
                           <div className="flex flex-wrap items-center gap-2 mt-2">
-                             {/* Badge Surface */}
                              <div className="flex items-center gap-1 text-[9px] font-black text-emerald-800 bg-emerald-50 px-2.5 py-1 rounded-lg uppercase">
                                 <Maximize2 size={10} />
                                 {zone.surface} HA
                              </div>
 
-                             {/* Badge Culture Style Amélioré */}
                              {zone.culture_nom ? (
                                <div className="flex items-center gap-1.5 text-[9px] font-black text-orange-700 bg-orange-50/80 border border-orange-100 px-2.5 py-1 rounded-lg uppercase tracking-wider shadow-sm">
                                  <Sprout size={10} className="text-orange-500" />
@@ -372,35 +408,34 @@ export default function ParcelleDetails({
                              ) : (
                                <div className="flex items-center gap-1.5 text-[9px] font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg uppercase italic border border-slate-100">
                                  <AlertCircle size={10} />
-                                 En attente
+                                 Planifier l’assolement
                                </div>
                              )}
                           </div>
                         </div>
                       </div>
 
-                      {/* Statuts */}
                       <div className="flex items-center gap-2 pt-2 border-t border-slate-50" onClick={e => e.stopPropagation()}>
                         <StatusBtn 
                           active={zone.statut === 'en_cours'} 
                           onClick={(e) => updateZoneStatus(e, zone.id, 'en_cours')}
                           color="orange"
                           icon={<Clock size={14} />}
-                          label="Culture"
+                          label="Culture en place"
                         />
                         <StatusBtn 
                           active={zone.statut === 'terminee'} 
                           onClick={(e) => updateZoneStatus(e, zone.id, 'terminee')}
                           color="emerald"
                           icon={<CheckCircle2 size={14} />}
-                          label="Récolté"
+                          label="Cycle achevé"
                         />
                         <StatusBtn 
                           active={zone.statut === 'annulee'} 
                           onClick={(e) => updateZoneStatus(e, zone.id, 'annulee')}
                           color="red"
                           icon={<XCircle size={14} />}
-                          label="Repos"
+                          label="Jachère"
                         />
                       </div>
                     </div>
@@ -411,6 +446,74 @@ export default function ParcelleDetails({
           </div>
         </section>
       </div>
+      {zoneToDelete && (
+  <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+    <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
+      
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center">
+          <AlertCircle size={24} />
+        </div>
+        <h3 className="text-lg font-black text-red-800">
+          Supprimer cette unité culturale ?
+        </h3>
+      </div>
+
+      <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+        ⚠️ Cette action est <b>irréversible</b>.<br/>
+        Toutes les données liées seront supprimées :
+        <br/>• cultures
+        <br/>• tâches
+        <br/>• diagnostics
+      </p>
+
+      <div className="flex gap-3">
+        <button
+          onClick={() => setZoneToDelete(null)}
+          className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200"
+        >
+          Annuler
+        </button>
+
+        <button
+          onClick={confirmDeleteZone}
+          className="flex-1 py-3 rounded-xl bg-red-600 text-white font-black hover:bg-red-700"
+        >
+          Supprimer
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+{offlineDeleteError && (
+  <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center">
+    <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
+
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+          <AlertCircle size={24} />
+        </div>
+        <h3 className="text-lg font-black text-amber-800">
+          Connexion requise
+        </h3>
+      </div>
+
+      <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+        La suppression d’une unité culturale nécessite une
+        <b> connexion Internet active</b>.
+      </p>
+
+      <button
+        onClick={() => setOfflineDeleteError(false)}
+        className="w-full py-3 rounded-xl bg-amber-600 text-white font-black hover:bg-amber-700"
+      >
+        Compris
+      </button>
+    </div>
+  </div>
+)}
+
     </div>
   )
 }

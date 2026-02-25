@@ -395,14 +395,29 @@ useEffect(() => {
   // ===============================
   // AUTH ACTIONS
   // ===============================
+// ===============================
+  // AUTH ACTIONS
+  // ===============================
   const handleRegister = async (payload) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: payload.email,
       password: payload.password,
-      options: { data: { nom: payload.nom, localisation: payload.localisation, phone: payload.phone } }
+      options: { 
+        data: { 
+          nom: payload.nom, 
+          localisation: payload.localisation, 
+          phone: payload.phone 
+        } 
+      }
     })
-    if (error) alert(error.message)
-    else alert('Compte créé avec succès')
+    
+    if (error) {
+      alert(error.message)
+    } else if (data?.user) {
+      // Si l'utilisateur est créé, on le met dans le state pour rediriger direct
+      setUser(data.user)
+      setStep('dashboard')
+    }
   }
 
   const handleLogin = (user) => setUser(user)

@@ -1,10 +1,10 @@
-import React, { useEffect, useState, useMemo } from 'react'
+import React, { useEffect, useState, useMemo, useCallback } from 'react'
 import {
   Microscope, CheckCircle2, Trash2, ArrowLeft,
   Cloud, Sparkles, AlertCircle, History, 
   RefreshCw, ChevronRight, Info, ShieldCheck, 
   Sprout, MapPin, X, Leaf, TreeDeciduous, Cherry, Settings2, Calendar, Activity,
-  SearchX, AlertTriangle, HelpCircle
+  SearchX, AlertTriangle, HelpCircle, Layers, LandPlot
 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 import { db } from '../lib/db'
@@ -33,7 +33,7 @@ const SYMPTOM_MAP = {
   "Plante sectionnée au niveau du sol": "plante_coupee.svg",
   "Présence de Striga": "striga.svg",
   "Taches brunes": "tache_brune.svg",
-  "Petites taches noires ou brunes": "tache_noire.svg",
+  "Petites taches noires ou bribes": "tache_noire.svg",
   "Mort subite de la plante": "mort_subite.svg",
   "Feuilles totalement jaunes (vieilles feuilles en bas)": "feuille_jaune_base.svg",
   "Taches grasses ou huileuses": "tache_huileuse.svg",
@@ -84,16 +84,18 @@ export default function Diagnostic({ user, setStep }) {
   const [loading, setLoading] = useState(true)
   const [historyActions, setHistoryActions] = useState(null)
   const [diagError, setDiagError] = useState(null)
-  const [showGuide, setShowGuide] = useState(false) // Logique de guide
+  const [showGuide, setShowGuide] = useState(false)
+  const [diagToDelete, setDiagToDelete] = useState(null)
+  const [offlineDeleteError, setOfflineDeleteError] = useState(false)
   const online = navigator.onLine
 
   const categorizedSymptoms = useMemo(() => {
     const categories = {
-      "Feuilles": { icon: <Leaf size={20}/>, color: "from-emerald-400 to-emerald-600", list: [] },
-      "Tiges & Tronc": { icon: <TreeDeciduous size={20}/>, color: "from-amber-500 to-amber-700", list: [] },
-      "Fruits & Fleurs": { icon: <Cherry size={20}/>, color: "from-rose-400 to-rose-600", list: [] },
-      "Racines & Sol": { icon: <MapPin size={20}/>, color: "from-slate-500 to-slate-700", list: [] },
-      "Global": { icon: <Settings2 size={20}/>, color: "from-indigo-400 to-indigo-600", list: [] }
+      "Feuilles": { icon: <Leaf size={18}/>, list: [] },
+      "Tiges & Tronc": { icon: <TreeDeciduous size={18}/>, list: [] },
+      "Fruits & Fleurs": { icon: <Cherry size={18}/>, list: [] },
+      "Racines & Sol": { icon: <MapPin size={18}/>, list: [] },
+      "Global": { icon: <Settings2 size={18}/>, list: [] }
     }
 
     symptomes.forEach(s => {
@@ -128,17 +130,41 @@ export default function Diagnostic({ user, setStep }) {
           zc.map(async z => {
             const culture = await db.cultures.get(z.culture_id)
             const zone = await db.zones.get(z.zone_id)
-            return { ...z, culture_nom: culture?.nom, zone_nom: zone?.nom }
+            const parcelle = await db.parcelles.get(zone?.parcelle_id)
+            return { 
+                ...z, 
+                culture_nom: culture?.nom, 
+                zone_nom: zone?.nom, 
+                exploitation_nom: parcelle?.nom || "Exploitation" 
+            }
           })
         )
         setZones(enriched)
         const localHistory = await db.diagnostic_history.where('user_id').equals(user.id).reverse().sortBy('created_at')
         setHistory(localHistory)
+        
         if (online) {
-          const { data, error } = await supabase.from('historique_diagnostics').select('*').eq('user_id', user.id).order('created_at', { ascending: false })
+          const { data, error } = await supabase
+            .from('historique_diagnostics')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: false })
+
           if (data && !error) {
-            await db.diagnostic_history.bulkPut(data.map(d => ({ ...d, synced: 1 })))
-            const synced = await db.diagnostic_history.where('user_id').equals(user.id).reverse().sortBy('created_at')
+            const remoteIds = new Set(data.map(d => d.id))
+            for (const local of localHistory) {
+              if (!remoteIds.has(local.id) && local.synced === 1) {
+                await db.diagnostic_history.delete(local.id)
+              }
+            }
+            await db.diagnostic_history.bulkPut(
+              data.map(d => ({ ...d, synced: 1 }))
+            )
+            const synced = await db.diagnostic_history
+              .where('user_id')
+              .equals(user.id)
+              .reverse()
+              .sortBy('created_at')
             setHistory(synced)
           }
         }
@@ -173,72 +199,39 @@ export default function Diagnostic({ user, setStep }) {
     setDiagError(null)
     setResult(null)
     setActions(null)
-
     if (!selectedZone || selectedSymptoms.length === 0) return
 
-    const selectedSymptomObjects = await db.symptomes
-      .where('id')
-      .anyOf(selectedSymptoms)
-      .toArray()
+    const selectedSymptomObjects = await db.symptomes.where('id').anyOf(selectedSymptoms).toArray()
+    const strongCount = selectedSymptomObjects.filter(s => (s.specificite ?? 1) >= 4).length
+    const mediumCount = selectedSymptomObjects.filter(s => (s.specificite ?? 1) >= 3).length
 
-    const strongCount = selectedSymptomObjects.filter(
-      s => (s.specificite ?? 1) >= 4
-    ).length
-
-    const mediumCount = selectedSymptomObjects.filter(
-      s => (s.specificite ?? 1) >= 3
-    ).length
-
-    if (
-      strongCount === 0 &&
-      mediumCount < 2 &&
-      selectedSymptoms.length < 3
-    ) {
+    if (strongCount === 0 && mediumCount < 2 && selectedSymptoms.length < 3) {
       setDiagError({
         title: "Précision insuffisante",
-        message:
-          "Les symptômes sélectionnés sont trop généraux. Ajoutez des symptômes plus caractéristiques.",
+        message: "Les symptômes sélectionnés sont trop généraux. Ajoutez des symptômes plus caractéristiques.",
         type: "warning"
       })
       return
     }
 
-    const maladies = await db.maladies
-      .where('culture_id')
-      .equals(selectedZone.culture_id)
-      .toArray()
-
+    const maladies = await db.maladies.where('culture_id').equals(selectedZone.culture_id).toArray()
     if (maladies.length === 0) return
 
     const maladieIds = maladies.map(m => m.id)
-
-    const allLinks = await db.maladie_symptomes
-      .where('maladie_id')
-      .anyOf(maladieIds)
-      .toArray()
-
+    const allLinks = await db.maladie_symptomes.where('maladie_id').anyOf(maladieIds).toArray()
     const scoreMap = {}
 
     for (const link of allLinks) {
       if (!selectedSymptoms.includes(link.symptome_id)) continue
-
-      const symptome = selectedSymptomObjects.find(
-        s => s.id === link.symptome_id
-      )
-
+      const symptome = selectedSymptomObjects.find(s => s.id === link.symptome_id)
       const poids = link.poids ?? 1
       const specificite = symptome?.specificite ?? 1
-
-      if (!scoreMap[link.maladie_id]) {
-        scoreMap[link.maladie_id] = 0
-      }
-
+      if (!scoreMap[link.maladie_id]) scoreMap[link.maladie_id] = 0
       scoreMap[link.maladie_id] += poids * specificite
     }
 
     let best = null
     let bestScore = 0
-
     for (const m of maladies) {
       const score = scoreMap[m.id] ?? 0
       if (score > bestScore) {
@@ -247,26 +240,19 @@ export default function Diagnostic({ user, setStep }) {
       }
     }
 
-    const avgSpecificite =
-      selectedSymptomObjects.reduce((a, s) => a + (s.specificite ?? 1), 0) /
-      selectedSymptomObjects.length
-
+    const avgSpecificite = selectedSymptomObjects.reduce((a, s) => a + (s.specificite ?? 1), 0) / selectedSymptomObjects.length
     const minScore = Math.max(3, selectedSymptoms.length * avgSpecificite)
+    
     if (!best || bestScore < minScore) {
       setDiagError({
         title: "Correspondance insuffisante",
-        message:
-          "Aucune maladie ne correspond suffisamment à cette combinaison.",
+        message: "Aucune maladie ne correspond suffisamment à cette combinaison.",
         type: "search"
       })
       return
     }
 
-    const confidence = Math.min(
-      95,
-      Math.round(50 + (bestScore / (selectedSymptoms.length * 5)) * 40)
-    )
-
+    const confidence = Math.min(95, Math.round(50 + (bestScore / (selectedSymptoms.length * 5)) * 40))
     let actionsData = null
 
     if (navigator.onLine) {
@@ -276,16 +262,12 @@ export default function Diagnostic({ user, setStep }) {
         .eq('culture_id', selectedZone.culture_id)
         .eq('maladie_id', best.id)
         .single()
-
       if (!error && data) {
         actionsData = data
         await db.actions_prioritaires.put(data)
       }
     } else {
-      actionsData = await db.actions_prioritaires
-        .where('[culture_id+maladie_id]')
-        .equals([selectedZone.culture_id, best.id])
-        .first()
+      actionsData = await db.actions_prioritaires.where('[culture_id+maladie_id]').equals([selectedZone.culture_id, best.id]).first()
     }
 
     const record = {
@@ -295,8 +277,7 @@ export default function Diagnostic({ user, setStep }) {
       maladie_nom: best.nom,
       confidence,
       created_at: new Date().toISOString(),
-      actions_snapshot: actionsData
-        ? {
+      actions_snapshot: actionsData ? {
             actions_bio: actionsData.actions_bio,
             prevention: actionsData.prevention,
             conseil: actionsData.conseil,
@@ -305,8 +286,7 @@ export default function Diagnostic({ user, setStep }) {
             culture_nom: selectedZone.culture_nom,
             date: new Date().toISOString(),
             confidence
-          }
-        : null,
+          } : null,
       synced: 0
     }
 
@@ -317,39 +297,51 @@ export default function Diagnostic({ user, setStep }) {
 
     if (navigator.onLine) {
       const { synced, ...toSupabase } = record
-      const { error } = await supabase
-        .from('historique_diagnostics')
-        .insert([toSupabase])
-
+      const { error } = await supabase.from('historique_diagnostics').insert([toSupabase])
       if (!error) {
         await db.diagnostic_history.update(record.id, { synced: 1 })
-        setHistory(prev =>
-          prev.map(item =>
-            item.id === record.id ? { ...item, synced: 1 } : item
-          )
-        )
+        setHistory(prev => prev.map(item => item.id === record.id ? { ...item, synced: 1 } : item))
       }
     }
+  }
+
+  const confirmDeleteDiag = async () => {
+    if (!navigator.onLine) {
+      setOfflineDeleteError(true)
+      setDiagToDelete(null)
+      return
+    }
+    if (!diagToDelete) return
+    const id = diagToDelete
+
+    setHistory(prev => prev.filter(h => h.id !== id))
+    await db.diagnostic_history.update(id, { synced: -1 })
+
+    if (navigator.onLine) {
+      const { error } = await supabase.from('historique_diagnostics').delete().eq('id', id)
+      if (!error) await db.diagnostic_history.delete(id)
+    }
+    setDiagToDelete(null)
   }
 
   if (loading) return (
     <div className="min-h-screen bg-[#FDFCF9] flex flex-col items-center justify-center gap-4">
       <div className="relative">
-        <Microscope size={56} className="text-emerald-800 animate-bounce" />
+        <Microscope size={56} className="text-[#1A2E26] animate-bounce" />
         <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 w-8 h-1.5 bg-emerald-900/10 rounded-full blur-sm" />
       </div>
-      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/40">Séquençage des données...</p>
+      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-[#1A2E26]/40">Séquençage des données...</p>
     </div>
   )
 
   return (
     <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26]">
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none" 
-           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")`, backgroundSize: '80px 80px' }} />
+           style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")` }} />
 
       <div className="relative p-6 max-w-2xl mx-auto space-y-8 pt-10">
         
-        {/* TOP BAR AVEC BOUTON GUIDE */}
+        {/* Navigation */}
         <div className="flex justify-between items-center px-2">
            <div className="flex items-center gap-2">
               <Microscope className="text-emerald-700" size={20} />
@@ -357,14 +349,14 @@ export default function Diagnostic({ user, setStep }) {
            </div>
            <button 
             onClick={() => setShowGuide(!showGuide)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all z-30 ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
            >
              {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
              <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
            </button>
         </div>
 
-        {/* HEADER */}
+        {/* Header */}
         <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-2xl">
           {showGuide && (
             <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
@@ -376,6 +368,7 @@ export default function Diagnostic({ user, setStep }) {
           <button onClick={() => setStep('dashboard')} className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20">
             <ArrowLeft size={20} />
           </button>
+          
           <div className="relative z-10 text-center space-y-2 pt-4">
             <div className="flex justify-center items-center gap-2">
               <div className="h-1 w-6 bg-amber-400 rounded-full" />
@@ -384,341 +377,283 @@ export default function Diagnostic({ user, setStep }) {
             </div>
             <h1 className="text-3xl font-serif font-medium">Santé des Plantes</h1>
             <div className="flex items-center justify-center gap-2">
-                <div className={`w-1.5 h-1.5 rounded-full ${navigator.onLine ? 'bg-emerald-400' : 'bg-orange-400 animate-pulse'}`} />
-                <p className="text-[9px] font-black text-white/60 uppercase tracking-widest">{navigator.onLine ? 'Cloud Synchronisé' : 'Mode Local'}</p>
+                <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-orange-400 animate-pulse'}`} />
+                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">
+                  {online ? 'Données synchronisées' : 'Mode hors-ligne'}
+                </p>
             </div>
           </div>
           <Microscope className="absolute right-[-20px] bottom-[-20px] text-white/5 w-48 h-48 rotate-12" />
         </header>
 
-        {/* 1. SELECTION ZONE */}
-        <section className="space-y-4 relative">
+        {/* SECTION 1: SÉLECTEUR DE ZONE */}
+        <section className="space-y-4 relative group">
           {showGuide && (
-            <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300">
-              <MapPin className="text-white mb-1" size={24} />
-              <p className="text-[10px] font-black uppercase text-white mb-1">Étape 1 : La Parcelle</p>
-              <p className="text-[10px] text-amber-50 font-bold leading-tight">Choisissez le champ où vous observez un problème.</p>
+            <div className="absolute inset-0 z-20 bg-emerald-900/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+              <Layers className="text-amber-400 mb-1" size={24} />
+              <p className="text-[10px] font-black uppercase text-amber-400">Choix de la parcelle</p>
+              <p className="text-[10px] text-emerald-50">Sélectionnez l'unité culturale à inspecter aujourd'hui.</p>
             </div>
           )}
           <div className="flex items-center gap-3 px-2">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 shadow-sm">
-               <MapPin size={16} strokeWidth={2.5} />
+            <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shadow-sm">
+              <Layers size={14} />
             </div>
-            <h3 className="text-[11px] font-black uppercase tracking-widest text-[#1A2E26]/60">Étape 1 : Parcelle cible</h3>
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#1A2E26]/60">Étape 1 : Localiser le problème</h3>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-4 px-2 scrollbar-hide">
-            {zones.map(z => (
-              <button
-                key={z.id}
-                onClick={() => setSelectedZone(z)}
-                className={`flex-shrink-0 w-40 p-6 rounded-[2.5rem] border-2 transition-all duration-500 flex flex-col items-center text-center gap-4 relative
-                  ${selectedZone?.id === z.id 
-                    ? 'bg-emerald-600 border-emerald-600 text-white shadow-xl shadow-emerald-900/20 -translate-y-1' 
-                    : 'bg-white border-[#E8E2D9] text-[#1A2E26] hover:border-emerald-200'}
-                `}
-              >
-                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-500 ${selectedZone?.id === z.id ? 'bg-white/20 rotate-6 shadow-inner' : 'bg-slate-50 border border-[#E8E2D9]'}`}>
-                  <img src={getCultureIconPath(z.culture_nom)} alt="" className="w-9 h-9 object-contain" onError={(e) => { e.target.src = '/assets/cultures/default.svg'; }} />
-                </div>
-                <div>
-                  <p className="font-black text-[11px] uppercase tracking-tighter truncate leading-tight">{z.zone_nom}</p>
-                  <p className={`text-[9px] font-medium opacity-60 mt-0.5 ${selectedZone?.id === z.id ? 'text-white' : 'text-slate-500'}`}>{z.culture_nom}</p>
-                </div>
-              </button>
-            ))}
+          <div className="grid grid-cols-1 gap-3">
+            {zones.map(z => {
+              const isSelected = selectedZone?.id === z.id;
+              return (
+                <button
+                  key={z.id}
+                  onClick={() => setSelectedZone(z)}
+                  className={`relative p-5 rounded-[2.5rem] border-2 transition-all duration-500 flex items-center gap-4 text-left overflow-hidden ${isSelected ? 'bg-[#1A2E26] border-[#1A2E26] text-white shadow-xl shadow-emerald-900/10' : 'bg-white border-[#E8E2D9] text-[#1A2E26] hover:border-emerald-200'} `}
+                >
+                  <div className={`w-14 h-14 rounded-2xl flex items-center justify-center flex-shrink-0 transition-transform duration-500 ${isSelected ? 'bg-white/10 rotate-6' : 'bg-slate-50 border border-[#E8E2D9]'}`}>
+                    <img src={getCultureIconPath(z.culture_nom)} alt="" className="w-8 h-8" onError={(e) => e.target.src = '/assets/cultures/default.svg'} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${isSelected ? 'text-amber-400' : 'text-emerald-700/60'}`}>{z.culture_nom}</p>
+                    <h4 className="text-lg font-bold truncate leading-tight">{z.zone_nom}</h4>
+                    <p className={`text-[9px] font-medium opacity-60 ${isSelected ? 'text-white' : 'text-slate-500'}`}>{z.exploitation_nom}</p>
+                  </div>
+                  {isSelected && <CheckCircle2 className="text-amber-400 animate-in zoom-in duration-300" size={24} />}
+                </button>
+              )
+            })}
           </div>
         </section>
 
-        {/* 2. SYMPTOMES PAR CATEGORIES */}
+        {/* SECTION 2: SÉLECTEUR DE SYMPTÔMES */}
         {selectedZone && (
-          <section className="space-y-6 animate-in fade-in slide-in-from-bottom-6 duration-700 relative">
+          <section className="space-y-6 animate-in slide-in-from-bottom-10 duration-700 relative group">
             {showGuide && (
-              <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300">
-                <Leaf className="text-white mb-1" size={24} />
-                <p className="text-[10px] font-black uppercase text-white mb-1">Étape 2 : Les Symptômes</p>
-                <p className="text-[10px] text-amber-50 font-bold leading-tight">Cochez tout ce que vous voyez sur la plante. Plus vous en mettez, plus l'IA sera précise.</p>
+              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[3rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
+                <AlertCircle className="text-amber-600 mb-2" size={32} />
+                <p className="text-xs font-black uppercase text-amber-600 mb-1">Observation des symptômes</p>
+                <p className="text-sm text-slate-600 font-medium">Naviguez par catégorie et cochez ce que vous voyez sur la plante. Plus vous en mettez, plus le diagnostic est précis.</p>
               </div>
             )}
-            <div className="flex items-center justify-between px-2">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-amber-700 font-bold text-xs shadow-sm">2</div>
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-[#1A2E26]/60">Étape 2 : Symptômes</h3>
-              </div>
-              {selectedSymptoms.length > 0 && (
-                <button onClick={() => setSelectedSymptoms([])} className="text-[9px] font-black text-rose-500 uppercase tracking-tighter flex items-center gap-1 bg-rose-50 px-3 py-1.5 rounded-full border border-rose-100">
-                    Effacer ({selectedSymptoms.length})
-                </button>
-              )}
-            </div>
-
-            <div className="flex gap-3 overflow-x-auto pb-4 px-2 scrollbar-hide">
-              {Object.entries(categorizedSymptoms).map(([name, cat]) => {
-                const isActive = activeCategory === name;
-                const countInCat = cat.list.filter(s => selectedSymptoms.includes(s.id)).length;
-                return (
-                  <button
-                    key={name}
-                    onClick={() => setActiveCategory(name)}
-                    className={`flex-shrink-0 relative flex flex-col items-center gap-2 p-4 min-w-[95px] rounded-[2rem] border-2 transition-all duration-300
-                      ${isActive 
-                        ? 'bg-white border-emerald-500 shadow-lg scale-105 z-10' 
-                        : 'bg-white/50 border-transparent text-slate-400 opacity-70 hover:bg-white'}`}
-                  >
-                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg bg-gradient-to-br ${cat.color} transition-transform ${isActive ? 'scale-110' : ''}`}>
-                      {cat.icon}
+            <div className="flex flex-col gap-4">
+               <div className="flex items-center justify-between px-2">
+                 <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-orange-50 border border-orange-100 flex items-center justify-center text-orange-600 shadow-sm">
+                      <AlertCircle size={14} />
                     </div>
-                    <span className={`text-[9px] font-black uppercase tracking-tighter ${isActive ? 'text-emerald-800' : ''}`}>{name}</span>
-                    {countInCat > 0 && (
-                        <div className="absolute top-2 right-2 w-5 h-5 bg-amber-400 text-[#1A2E26] text-[10px] font-black flex items-center justify-center rounded-full border-2 border-white shadow-sm animate-in zoom-in">
-                            {countInCat}
-                        </div>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-            
-            <div className="grid grid-cols-2 gap-3 min-h-[220px]">
-              {categorizedSymptoms[activeCategory].list.map(s => {
-                const active = selectedSymptoms.includes(s.id)
-                return (
-                  <button
-                    key={s.id}
-                    onClick={() => setSelectedSymptoms(p => active ? p.filter(x => x !== s.id) : [...p, s.id])}
-                    className={`group p-4 rounded-[2rem] border-2 transition-all duration-300 flex flex-col gap-3 text-left relative overflow-hidden
-                      ${active 
-                        ? 'bg-emerald-50 border-emerald-500 shadow-md' 
-                        : 'bg-white border-[#F0EFEA] hover:border-emerald-200'}
-                    `}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${active ? 'bg-white shadow-md scale-110' : 'bg-slate-50'}`}>
-                          <img src={getSymptomIconPath(s.libelle)} alt="" className="w-8 h-8 object-contain" onError={(e) => { e.target.src = '/assets/symptomes/default.svg'; }} />
-                        </div>
-                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${active ? 'bg-emerald-500 border-emerald-500 rotate-0' : 'border-slate-200 rotate-90'}`}>
-                          <CheckCircle2 size={14} className={`text-white transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
-                        </div>
-                    </div>
-                    <span className={`text-[11px] font-bold leading-tight pr-2 ${active ? 'text-emerald-900' : 'text-slate-500'}`}>{s.libelle}</span>
-                    {active && <div className="absolute bottom-0 right-0 w-8 h-8 bg-emerald-500/10 rounded-tl-full" />}
-                  </button>
-                )
-              })}
-            </div>
+                    <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#1A2E26]/60">Étape 2 : Signes observés</h3>
+                 </div>
+                 <span className="text-[9px] font-black bg-emerald-50 text-emerald-800 px-3 py-1 rounded-full uppercase tracking-widest">
+                    {selectedSymptoms.length} Sélectionnés
+                 </span>
+               </div>
 
-            {diagError && (
-              <div className="bg-rose-50 border-2 border-rose-100 p-6 rounded-[2.5rem] flex gap-4 animate-in slide-in-from-top-2">
-                <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-rose-500 shadow-sm flex-shrink-0">
-                  {diagError.type === 'warning' ? <AlertTriangle size={24} /> : <SearchX size={24} />}
-                </div>
-                <div className="space-y-1">
-                  <p className="font-black text-xs uppercase text-rose-900">{diagError.title}</p>
-                  <p className="text-xs text-rose-800/70 leading-relaxed font-medium">{diagError.message}</p>
-                </div>
-              </div>
-            )}
+               <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide px-1">
+                 {Object.entries(categorizedSymptoms).map(([cat, data]) => (
+                   <button
+                    key={cat}
+                    onClick={() => setActiveCategory(cat)}
+                    className={`flex items-center gap-2 px-5 py-3 rounded-2xl whitespace-nowrap transition-all text-[10px] font-black uppercase tracking-widest ${activeCategory === cat ? 'bg-[#1A2E26] text-white shadow-lg scale-105' : 'bg-white text-slate-400 border border-[#E8E2D9] hover:border-emerald-200'}`}
+                   >
+                     {data.icon} {cat}
+                   </button>
+                 ))}
+               </div>
 
-            <button
-              onClick={runDiagnostic}
-              disabled={selectedSymptoms.length === 0}
-              className={`w-full py-6 rounded-[2.5rem] font-black text-[12px] uppercase tracking-[0.4em] flex items-center justify-center gap-3 transition-all
-                ${selectedSymptoms.length > 0 
-                  ? 'bg-amber-500 text-[#1A2E26] shadow-xl shadow-amber-900/10 active:scale-95 hover:bg-amber-400' 
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed opacity-50'}
-              `}
-            >
-              <Sparkles size={18} className={selectedSymptoms.length > 0 ? 'animate-pulse text-amber-900' : ''} />
-              Lancer l'analyse
-            </button>
+               <div className="bg-white rounded-[3rem] p-6 border border-[#E8E2D9] shadow-sm">
+                 <div className="grid grid-cols-2 gap-3">
+                   {categorizedSymptoms[activeCategory].list.map(s => {
+                     const active = selectedSymptoms.includes(s.id);
+                     return (
+                       <button
+                        key={s.id}
+                        onClick={() => setSelectedSymptoms(prev => active ? prev.filter(id => id !== s.id) : [...prev, s.id])}
+                        className={`group relative p-4 rounded-[2rem] border-2 flex flex-col items-center text-center gap-3 transition-all duration-300 ${active ? 'bg-orange-50 border-orange-400 shadow-md scale-[1.02]' : 'bg-[#FDFCF9] border-transparent hover:border-orange-100 hover:bg-white'}`}
+                       >
+                         <div className={`w-16 h-16 rounded-2xl flex items-center justify-center p-2 transition-transform duration-500 ${active ? 'bg-white shadow-sm rotate-3' : 'bg-white'}`}>
+                           <img src={getSymptomIconPath(s.libelle)} alt="" className="w-full h-full object-contain" />
+                         </div>
+                         <p className={`text-[10px] font-bold leading-tight ${active ? 'text-orange-900' : 'text-slate-600'}`}>{s.libelle}</p>
+                         {active && <div className="absolute top-2 right-2 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center text-white shadow-sm animate-in zoom-in"><CheckCircle2 size={12} /></div>}
+                       </button>
+                     )
+                   })}
+                 </div>
+               </div>
+
+               <button
+                disabled={selectedSymptoms.length === 0}
+                onClick={runDiagnostic}
+                className={`w-full py-6 rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] transition-all flex items-center justify-center gap-3 shadow-xl active:scale-95 ${selectedSymptoms.length > 0 ? 'bg-gradient-to-r from-[#1A2E26] to-[#0A261D] text-white shadow-emerald-900/20' : 'bg-slate-100 text-slate-300 cursor-not-allowed'}`}
+               >
+                 <Activity size={18} className={selectedSymptoms.length > 0 ? 'animate-pulse' : ''} />
+                 Lancer l'analyse
+               </button>
+            </div>
           </section>
         )}
 
-        {/* 3. RESULTAT IMMEDIAT */}
+        {/* SECTION 3: RÉSULTATS */}
+        {diagError && (
+          <div className="animate-in zoom-in duration-500 bg-amber-50 border-2 border-dashed border-amber-200 p-8 rounded-[3rem] text-center space-y-4 shadow-inner">
+            <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto shadow-sm text-amber-500">
+              {diagError.type === 'warning' ? <AlertTriangle size={32} /> : <SearchX size={32} />}
+            </div>
+            <div>
+              <h4 className="text-amber-900 font-black uppercase text-sm tracking-widest">{diagError.title}</h4>
+              <p className="text-amber-800/70 text-sm mt-2 font-medium">{diagError.message}</p>
+            </div>
+          </div>
+        )}
+
         {result && (
-          <div className="bg-[#0A261D] text-white p-10 rounded-[3rem] shadow-2xl relative overflow-hidden animate-in zoom-in duration-500 border border-emerald-400/20">
-            {showGuide && (
-              <div className="absolute inset-0 z-20 bg-emerald-600/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                <Activity className="text-white mb-2" size={32} />
-                <p className="text-xs font-bold uppercase tracking-widest text-white mb-1">Résultat d'Analyse</p>
-                <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Voici la maladie la plus probable selon vos indications et le taux de confiance de l'IA.</p>
-              </div>
-            )}
-            <div className="relative z-10 space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="px-4 py-1.5 bg-emerald-400/10 rounded-full border border-emerald-400/20 text-[10px] font-black uppercase tracking-widest text-emerald-400">
-                  Résultat Détecté
-                </div>
-                <div className="flex items-center gap-2">
-                  <Activity size={14} className="text-emerald-400" />
-                  <span className="text-xs font-bold">{result.confidence}% de certitude</span>
-                </div>
-              </div>
-              <div>
-                <h2 className="text-4xl font-serif leading-tight mb-2">{result.nom}</h2>
-                <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-400 transition-all duration-1000 ease-out" style={{ width: `${result.confidence}%` }} />
-                </div>
-              </div>
-            </div>
-            <Microscope className="absolute right-[-20px] top-[-20px] text-white/5 w-48 h-48 -rotate-12" />
-          </div>
-        )}
-
-        {/* 3b. ACTIONS DIRECTES */}
-        {actions && (
-          <div className="bg-white p-8 rounded-[3rem] border border-emerald-100 shadow-xl space-y-6 animate-in fade-in slide-in-from-top-4 duration-500 relative">
-             {showGuide && (
-              <div className="absolute inset-0 z-20 bg-emerald-500/95 backdrop-blur-md rounded-[3rem] p-6 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                <ShieldCheck className="text-white mb-2" size={32} />
-                <p className="text-xs font-bold uppercase tracking-widest text-white mb-1">Plan d'Action</p>
-                <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Suivez ces étapes bio pour soigner votre culture et sauver votre récolte.</p>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600 shadow-inner">
-                  <ShieldCheck size={20} />
-                </div>
-                <h3 className="text-xs font-black uppercase tracking-widest text-[#1A2E26]">Plan de Traitement</h3>
-              </div>
-              <span className={`text-[9px] font-black px-3 py-1.5 rounded-full uppercase tracking-tighter ${actions.niveau_urgence === 'Haut' ? 'bg-rose-50 text-rose-600 border border-rose-100 animate-pulse' : 'bg-amber-50 text-amber-600'}`}>
-                Urgence : {actions.niveau_urgence}
-              </span>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="bg-emerald-50/40 p-5 rounded-[2.5rem] border border-emerald-100/50">
-                <div className="flex items-center gap-2 mb-2">
-                    <Sprout size={14} className="text-emerald-600" />
-                    <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Action Biologique</p>
-                </div>
-                <p className="text-sm leading-relaxed text-[#1A2E26]/80 font-medium">{actions.actions_bio}</p>
-              </div>
-              
-              <div className="bg-amber-50 p-6 rounded-[2.5rem] border border-amber-100 relative overflow-hidden">
-                <p className="text-[10px] font-black text-amber-700 uppercase mb-3 tracking-widest flex items-center gap-2">
-                    <Info size={14} /> Le mot de l'expert
-                </p>
-                <p className="text-base text-amber-900 italic font-serif leading-relaxed relative z-10">
-                    "{actions.conseil}"
-                </p>
-                <Sparkles className="absolute -bottom-2 -right-2 text-amber-200/40 w-16 h-16" />
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* 4. HISTORIQUE */}
-        <section className="space-y-4 pt-8 border-t border-[#E8E2D9] relative">
-           {showGuide && (
-              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-sm rounded-[2.5rem] p-6 flex flex-col items-center justify-center text-center border-2 border-amber-500 animate-in fade-in duration-300">
-                <History className="text-amber-600 mb-2" size={32} />
-                <p className="text-xs font-bold uppercase tracking-widest text-amber-600 mb-1">Journal de Bord</p>
-                <p className="text-sm font-serif italic text-slate-600 max-w-[240px]">Retrouvez ici tous vos anciens diagnostics même sans connexion internet.</p>
-              </div>
-            )}
-          <div className="flex items-center justify-between px-2">
-            <div className="flex items-center gap-3 text-slate-400">
-                <History size={16} />
-                <h3 className="text-[11px] font-black uppercase tracking-widest">Journal d'Analyses</h3>
-            </div>
-            <span className="text-[10px] font-bold text-slate-300 uppercase">{history.length} Entrées</span>
-          </div>
-
-          {history.length === 0 ? (
-            <div className="bg-white rounded-[2.5rem] p-12 text-center border-2 border-dashed border-[#E8E2D9] opacity-60">
-               <p className="text-xs font-serif italic text-slate-400">Votre historique est vide.</p>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {history.map(h => (
-                <div
-                  key={h.id}
-                  onClick={() => { 
-                    if (h.actions_snapshot) {
-                      setHistoryActions({
-                        ...h.actions_snapshot,
-                        maladie_nom: h.maladie_nom,
-                        date: h.created_at,
-                        confidence: h.confidence
-                      }) 
-                    }
-                  }}
-                  className="group bg-white p-5 rounded-[2.2rem] flex items-center gap-4 border border-[#E8E2D9] hover:border-emerald-300 transition-all cursor-pointer shadow-sm active:scale-[0.98]"
-                >
-                  <div className={`w-12 h-12 rounded-2xl flex items-center justify-center flex-shrink-0 ${h.synced ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
-                    {h.synced ? <Cloud size={22} /> : <RefreshCw size={22} className="animate-spin-slow" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-black text-xs uppercase text-[#1A2E26] truncate tracking-tight">{h.maladie_nom}</p>
-                    <div className="flex items-center gap-3 mt-1">
-                      <div className="flex items-center gap-1 text-slate-400">
-                        <Calendar size={10} />
-                        <span className="text-[9px] font-bold">{new Date(h.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">{h.confidence}%</span>
+          <section className="animate-in slide-in-from-bottom-10 duration-700 space-y-6">
+            <div className="bg-white rounded-[3.5rem] p-8 border border-emerald-100 shadow-2xl shadow-emerald-900/5 relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-[5rem] -mr-8 -mt-8 opacity-50" />
+               <div className="relative z-10 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 bg-[#1A2E26] rounded-3xl flex items-center justify-center text-amber-400 shadow-xl rotate-3">
+                      <Sparkles size={28} />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-emerald-800/40 uppercase tracking-[0.3em]">Résultat du Séquençage</p>
+                      <h2 className="text-3xl font-serif font-bold text-[#1A2E26] leading-tight">{result.nom}</h2>
                     </div>
                   </div>
-                  <button
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      if (window.confirm("Supprimer ce diagnostic de l'historique ?")) {
-                        if (online) await supabase.from('historique_diagnostics').delete().eq('id', h.id)
-                        await db.diagnostic_history.delete(h.id)
-                        setHistory(p => p.filter(x => x.id !== h.id))
-                      }
-                    }}
-                    className="w-10 h-10 rounded-xl flex items-center justify-center text-slate-300 hover:text-rose-500 hover:bg-rose-50 transition-all"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                </div>
-              ))}
+
+                  <div className="bg-slate-50 rounded-[2rem] p-6 border border-slate-100">
+                    <div className="flex justify-between items-center mb-4">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Indice de confiance</span>
+                      <span className="text-lg font-black text-[#1A2E26]">{result.confidence}%</span>
+                    </div>
+                    <div className="h-4 bg-white rounded-full p-1 border border-slate-100 shadow-inner">
+                      <div className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full transition-all duration-1000 shadow-lg" style={{ width: `${result.confidence}%` }} />
+                    </div>
+                  </div>
+
+                  {actions && (
+                    <div className="space-y-4">
+                      <div className="p-6 bg-emerald-50/50 rounded-[2.5rem] border border-emerald-100">
+                        <div className="flex items-center gap-2 mb-3">
+                          <ShieldCheck className="text-emerald-700" size={16} />
+                          <p className="font-black text-emerald-900 text-[10px] uppercase tracking-widest">Protocole Biologique</p>
+                        </div>
+                        <p className="text-sm leading-relaxed text-emerald-900/70">{actions.actions_bio}</p>
+                      </div>
+                      <div className="p-6 bg-orange-50/50 rounded-[2.5rem] border border-orange-100">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Info className="text-orange-700" size={16} />
+                          <p className="font-black text-orange-900 text-[10px] uppercase tracking-widest">Prévention Future</p>
+                        </div>
+                        <p className="text-sm leading-relaxed text-orange-900/70">{actions.prevention}</p>
+                      </div>
+                    </div>
+                  )}
+               </div>
+            </div>
+          </section>
+        )}
+
+        {/* SECTION 4: HISTORIQUE */}
+        <section className="space-y-6 relative group">
+          {showGuide && (
+            <div className="absolute inset-0 z-20 bg-[#FDFCF9]/90 backdrop-blur-sm rounded-[2.5rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300 border-2 border-dashed border-amber-500">
+              <History className="text-amber-600 mb-2" size={32} />
+              <p className="text-xs font-black uppercase text-amber-600 mb-1">Archives d'analyses</p>
+              <p className="text-sm text-slate-600 font-medium italic">Retrouvez tous vos anciens diagnostics. Cliquez sur une fiche pour revoir les solutions préconisées par l'expert.</p>
             </div>
           )}
-        </section>
+          <div className="flex items-center justify-between px-2">
+            <div className="flex items-center gap-3">
+              <div className="w-1.5 h-6 bg-[#1A2E26] rounded-full" />
+              <h3 className="text-xl font-serif font-bold text-[#0A261D]">Analyses passées</h3>
+            </div>
+            <History className="text-slate-300" size={20} />
+          </div>
 
-        {/* MODAL HISTORIQUE */}
-        {historyActions && (
-          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-[#1A2E26]/80 backdrop-blur-md animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-lg rounded-[3.5rem] p-8 space-y-8 relative overflow-hidden animate-in slide-in-from-bottom-12 shadow-2xl">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-emerald-400 via-amber-400 to-emerald-600" />
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
-                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 w-fit px-3 py-1 rounded-full border border-emerald-100">
-                        <Activity size={12} className="animate-pulse" />
-                        <span className="text-[9px] font-black uppercase tracking-[0.2em]">Rapport Certifié</span>
-                    </div>
-                    <h3 className="text-3xl font-serif font-medium text-[#1A2E26] leading-tight pt-2">{historyActions.maladie_nom}</h3>
-                    <p className="text-[11px] font-black text-slate-400 uppercase tracking-widest">{historyActions.culture_nom || "Culture Identifiée"}</p>
+          <div className="space-y-3">
+            {history.length === 0 ? (
+              <div className="bg-white rounded-[3rem] p-16 border-2 border-dashed border-slate-100 text-center flex flex-col items-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                  <History className="text-slate-200" size={32} />
                 </div>
-                <button onClick={() => setHistoryActions(null)} className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition-all shadow-sm">
-                  <X size={24} />
-                </button>
+                <p className="text-sm font-medium text-slate-400 italic">Aucune archive disponible.</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-slate-50 p-4 rounded-[2rem] flex flex-col items-center text-center">
-                    <Calendar size={16} className="text-slate-400 mb-1" />
-                    <span className="text-[10px] font-black uppercase text-slate-500">Date d'analyse</span>
-                    <span className="text-xs font-bold text-[#1A2E26]">{new Date(historyActions.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-                </div>
-                <div className="bg-emerald-50 p-4 rounded-[2rem] flex flex-col items-center text-center">
-                    <ShieldCheck size={16} className="text-emerald-500 mb-1" />
-                    <span className="text-[10px] font-black uppercase text-emerald-600">Précision</span>
-                    <span className="text-xs font-bold text-emerald-800">{historyActions.confidence}%</span>
-                </div>
-              </div>
-              <div className="space-y-4 max-h-[50vh] overflow-y-auto pr-2 scrollbar-hide">
-                <div className="p-6 bg-emerald-50/50 rounded-[2.5rem] border border-emerald-100/50">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Sprout size={16} className="text-emerald-600" />
-                    <p className="font-black text-emerald-700 text-[10px] uppercase tracking-widest">Protocole Bio</p>
+            ) : (
+              history.map(h => (
+                <div 
+                  key={h.id}
+                  onClick={() => h.actions_snapshot && setHistoryActions(h.actions_snapshot)}
+                  className="bg-white p-5 rounded-[2.5rem] border border-[#E8E2D9] flex items-center gap-4 hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer relative overflow-hidden"
+                >
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-[#1A2E26] group-hover:bg-[#1A2E26] group-hover:text-white transition-colors duration-500">
+                    <Microscope size={20} />
                   </div>
-                  <p className="text-sm leading-relaxed text-emerald-900 font-medium">{historyActions.actions_bio}</p>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-[#1A2E26] truncate">{h.maladie_nom}</h4>
+                      {h.synced === 0 && <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />}
+                    </div>
+                    <div className="flex items-center gap-3 mt-1">
+                      <p className="text-[10px] font-black text-emerald-800 uppercase tracking-widest">{h.confidence}% certitude</p>
+                      <span className="text-[10px] text-slate-300">•</span>
+                      <p className="text-[10px] font-medium text-slate-400">{new Date(h.created_at).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                     <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDiagToDelete(h.id);
+                        }}
+                        className="p-3 text-slate-300 hover:text-red-500 hover:bg-red-50 rounded-2xl transition-all"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                      <ChevronRight className="text-slate-200" size={20} />
+                  </div>
                 </div>
-                <div className="p-6 bg-slate-50 rounded-[2.5rem] border border-slate-200">
-                  <div className="flex items-center gap-2 mb-3">
-                    <ShieldCheck size={16} className="text-slate-600" />
+              ))
+            )}
+          </div>
+        </section>
+      </div>
+
+      {/* MODALE DETAILS HISTORIQUE */}
+      {historyActions && (
+        <div className="fixed inset-0 z-50 bg-[#0A261D]/60 backdrop-blur-xl flex items-end sm:items-center justify-center p-4">
+          <div className="bg-white w-full max-w-lg rounded-[3.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-500">
+              <div className="relative p-8 bg-[#1A2E26] text-white">
+                <button onClick={() => setHistoryActions(null)} className="absolute top-6 right-6 w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all">
+                  <X size={20} />
+                </button>
+                <div className="space-y-2">
+                  <p className="text-[10px] font-black text-amber-400 uppercase tracking-[0.4em]">Rapport d'Expertise</p>
+                  <h3 className="text-3xl font-serif font-bold">{historyActions.maladie_nom}</h3>
+                  <div className="flex items-center gap-4 pt-2">
+                    <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/10">
+                      <Sprout size={12} className="text-amber-400" />
+                      <span className="text-[9px] font-black uppercase tracking-widest">{historyActions.culture_nom}</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-3 py-1 bg-white/10 rounded-full border border-white/10">
+                      <Calendar size={12} className="text-amber-400" />
+                      <span className="text-[9px] font-black uppercase tracking-widest">{new Date(historyActions.date).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="text-emerald-600" />
+                    <p className="font-black text-slate-500 text-[10px] uppercase tracking-widest">Action Prioritaire</p>
+                  </div>
+                  <p className="text-sm leading-relaxed text-slate-600">{historyActions.actions_bio}</p>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="text-slate-600" />
                     <p className="font-black text-slate-500 text-[10px] uppercase tracking-widest">Prévention Future</p>
                   </div>
                   <p className="text-sm leading-relaxed text-slate-600">{historyActions.prevention}</p>
@@ -734,17 +669,64 @@ export default function Diagnostic({ user, setStep }) {
                   <Sparkles className="absolute -bottom-4 -right-4 text-white/5 w-24 h-24" />
                 </div>
               </div>
-              <button 
-                onClick={() => setHistoryActions(null)} 
-                className="w-full py-6 bg-[#1A2E26] text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] shadow-xl hover:bg-emerald-950 active:scale-95 transition-all"
-              >
-                Fermer le rapport
+              <div className="p-8 pt-0">
+                <button 
+                  onClick={() => setHistoryActions(null)} 
+                  className="w-full py-6 bg-[#1A2E26] text-white rounded-[2.5rem] font-black text-xs uppercase tracking-[0.4em] shadow-xl hover:bg-emerald-950 active:scale-95 transition-all"
+                >
+                  Fermer le rapport
+                </button>
+              </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODALE SUPPRESSION (INFO MODAL) */}
+      {diagToDelete && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center">
+                <AlertCircle size={24} />
+              </div>
+              <h3 className="text-lg font-black text-red-800">Supprimer l'analyse ?</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              ⚠️ Cette action est <b>irréversible</b>.<br/>
+              L'historique de cette analyse phytosanitaire sera définitivement effacé du cloud.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setDiagToDelete(null)} className="flex-1 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold hover:bg-slate-200">
+                Annuler
+              </button>
+              <button onClick={confirmDeleteDiag} className="flex-1 py-3 rounded-xl bg-red-600 text-white font-black hover:bg-red-700">
+                Supprimer
               </button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
+      {/* ERREUR HORS LIGNE SUPPRESSION */}
+      {offlineDeleteError && (
+        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center">
+          <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
+                <AlertCircle size={24} />
+              </div>
+              <h3 className="text-lg font-black text-amber-800">Connexion requise</h3>
+            </div>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              La suppression d’une archive nécessite une <b>connexion Internet active</b> pour synchroniser vos données.
+            </p>
+            <button onClick={() => setOfflineDeleteError(false)} className="w-full py-3 rounded-xl bg-amber-600 text-white font-black hover:bg-amber-700">
+              Compris
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
