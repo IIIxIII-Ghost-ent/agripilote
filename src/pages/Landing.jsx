@@ -4,7 +4,7 @@ import {
   MapPin, Calendar, Camera, Users, 
   ShoppingBag, Wallet, CloudSun, Bell,
   ArrowRight, Sprout, Leaf, ChevronRight,
-  Menu, X, Share, PlusSquare, Store, Monitor, Smartphone
+  Menu, X, Share, PlusSquare, Store, Monitor, Smartphone, Download
 } from "lucide-react";
 
 export default function Landing() {
@@ -31,9 +31,9 @@ export default function Landing() {
       await deferredPrompt.userChoice;
       setDeferredPrompt(null);
     } else if (isIos) {
-      alert("Sur iPhone : Appuyez sur le bouton 'Partager' en bas de Safari, puis sur 'Sur l'écran d'accueil'.");
+      alert("Installation sur iPhone :\n\n1. Appuyez sur l'icône 'Partager' (le carré avec une flèche en bas).\n2. Faites défiler et appuyez sur 'Sur l'écran d'accueil'.");
     } else {
-      alert("Sur PC : cliquez sur l'icône d'installation dans la barre d'adresse ou dans le menu du navigateur.");
+      alert("Sur ordinateur : Cliquez sur l'icône d'installation dans la barre d'adresse de votre navigateur (en haut à droite).");
     }
   };
 
@@ -146,15 +146,26 @@ export default function Landing() {
               Le Marché
             </Link>
 
-            {/* BOUTON ADAPTATIF IPHONE / AUTRE */}
+            {/* GUIDE D'INSTALLATION AMÉLIORÉ */}
             <button
               onClick={handleInstall}
-              className="bg-white/90 backdrop-blur-sm border-2 border-[#E8E2D9] text-[#1A2E26] px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest hover:bg-white transition flex items-center justify-center gap-3 shadow-sm active:scale-95"
+              className="group relative bg-white/90 backdrop-blur-sm border-2 border-emerald-100 text-[#1A2E26] px-10 py-6 rounded-[2rem] font-black uppercase tracking-widest hover:border-emerald-500 transition-all flex items-center justify-center gap-3 shadow-sm active:scale-95"
             >
-              <div className="flex items-center gap-1.5 opacity-80">
-                {isIos ? <Share size={18} className="text-blue-500" /> : <><Monitor size={18} /><Smartphone size={18} /></>}
+              <div className="flex items-center gap-2">
+                {isIos ? (
+                  <div className="bg-blue-50 p-2 rounded-lg">
+                    <Share size={20} className="text-blue-600 animate-bounce" />
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 p-2 rounded-lg">
+                    <Download size={20} className="text-emerald-600" />
+                  </div>
+                )}
               </div>
-              {isIos ? "Installer sur iPhone" : "Installer l'App"}
+              <div className="flex flex-col items-start leading-none">
+                <span className="text-[10px] opacity-60 mb-1">Application Web</span>
+                <span>{isIos ? "Installer sur iPhone" : "Installer l'App"}</span>
+              </div>
             </button>
           </div>
         </div>
