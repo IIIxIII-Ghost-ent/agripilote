@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { 
   MapPin, Calendar, Camera, Users, 
   ShoppingBag, Wallet, CloudSun, Bell,
@@ -10,6 +10,7 @@ import {
 export default function Landing() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const iosSectionRef = useRef(null);
 
   useEffect(() => {
     const handler = (e) => {
@@ -21,10 +22,16 @@ export default function Landing() {
   }, []);
 
   const handleInstall = async () => {
+    // Vérification si c'est un iPhone/iPad
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
     if (deferredPrompt) {
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
       setDeferredPrompt(null);
+    } else if (isIOS) {
+      // Si iOS, on scrolle vers la section d'explication
+      iosSectionRef.current?.scrollIntoView({ behavior: 'smooth' });
     } else {
       alert("Sur PC : cliquez sur l'icône d'installation dans la barre d'adresse ou dans le menu du navigateur.");
     }
@@ -73,7 +80,7 @@ export default function Landing() {
           </button>
         </div>
 
-        {/* Mobile Menu Overlay - Fond Solide et Clair */}
+        {/* Mobile Menu Overlay */}
         <div className={`fixed inset-0 bg-[#FDFCF9] z-[105] flex flex-col transition-all duration-500 lg:hidden ${isMenuOpen ? 'translate-y-0 opacity-100 visible' : '-translate-y-full opacity-0 invisible'}`}>
             <nav className="flex-grow flex flex-col items-center justify-center gap-8 text-2xl font-serif font-bold italic">
                 <a href="#" onClick={() => setIsMenuOpen(false)} className="hover:text-emerald-700">Accueil</a>
@@ -153,8 +160,8 @@ export default function Landing() {
         </div>
       </section>
 
-      {/* SECTION IPHONE Améliorée (Nouveau Design) */}
-      <section className="max-w-4xl mx-auto px-6 mb-20">
+      {/* SECTION IPHONE Améliorée (Utilisée par handleInstall pour iPhone) */}
+      <section ref={iosSectionRef} className="max-w-4xl mx-auto px-6 mb-20 scroll-mt-24">
         <div className="bg-white rounded-[2.5rem] p-2 border border-[#E8E2D9] shadow-xl overflow-hidden">
             <div className="bg-amber-50/40 rounded-[2.3rem] p-8 md:p-10 flex flex-col md:flex-row items-center gap-10">
                 <div className="relative flex-shrink-0">
