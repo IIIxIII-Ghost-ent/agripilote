@@ -583,8 +583,18 @@ export default function Diagnostic({ user, setStep }) {
               history.map(h => (
                 <div 
                   key={h.id}
-                  onClick={() => h.actions_snapshot && setHistoryActions(h.actions_snapshot)}
-                  className="bg-white p-5 rounded-[2.5rem] border border-[#E8E2D9] flex items-center gap-4 hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer relative overflow-hidden"
+onClick={() =>
+  setHistoryActions(
+    h.actions_snapshot || {
+      maladie_nom: h.maladie_nom,
+      culture_nom: '—',
+      date: h.created_at,
+      actions_bio: "Aucune action enregistrée pour ce diagnostic.",
+      prevention: "Non disponible.",
+      conseil: "Relancez un diagnostic pour obtenir des recommandations complètes."
+    }
+  )
+}                  className="bg-white p-5 rounded-[2.5rem] border border-[#E8E2D9] flex items-center gap-4 hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer relative overflow-hidden"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-[#1A2E26] group-hover:bg-[#1A2E26] group-hover:text-white transition-colors duration-500">
                     <Microscope size={20} />

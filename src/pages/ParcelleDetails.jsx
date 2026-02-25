@@ -30,6 +30,7 @@ export default function ParcelleDetails({
   const [showGuide, setShowGuide] = useState(false)
 const [zoneToDelete, setZoneToDelete] = useState(null)
 const [offlineDeleteError, setOfflineDeleteError] = useState(false)
+const [surfaceError, setSurfaceError] = useState(null)
   // --- LOGIQUE D'AFFICHAGE DES ICONES SVG ---
   const getCropStyle = (cultureNom) => {
     if (!cultureNom) return { icon: '/assets/cultures/default.svg', color: 'bg-emerald-50' };
@@ -134,29 +135,59 @@ const zc = await db.zone_cultures
   };
 
   const addZone = async ({ nom, surface }) => {
-    const id = crypto.randomUUID()
-    const newZone = { 
-      id, 
-      parcelle_id: parcelle.id, 
-      user_id: parcelle.user_id, 
-      nom, 
-      surface: Number(surface), 
-      statut: 'en_cours', 
-      created_at: new Date().toISOString(), 
-      synced: 0 
-    }
-    await db.zones.add(newZone)
-    setZones(prev => [...prev, newZone].sort((a, b) => new Date(a.created_at) - new Date(b.created_at)))
-    
-    if (navigator.onLine) {
-      const { synced, culture_nom, ...dataToSend } = newZone
-      const { error } = await supabase.from('zones').insert([dataToSend])
-      if (!error) {
-        await db.zones.update(id, { synced: 1 })
-        setZones(prev => prev.map(z => z.id === id ? { ...z, synced: 1 } : z))
-      }
+
+  const surfaceUtiliseeActuelle = zones.reduce(
+    (total, z) => total + Number(z.surface),
+    0
+  )
+
+  const surfaceRestanteActuelle =
+    Number(parcelle.surface) - surfaceUtiliseeActuelle
+
+  // 🚨 SÉCURITÉ ABSOLUE
+if (surface > surfaceRestanteActuelle) {
+  setSurfaceError({
+    demande: surface,
+    restante: surfaceRestanteActuelle
+  })
+  return false
+}
+
+  const id = crypto.randomUUID()
+
+  const newZone = {
+    id,
+    parcelle_id: parcelle.id,
+    user_id: parcelle.user_id,
+    nom,
+    surface: Number(surface),
+    statut: 'en_cours',
+    created_at: new Date().toISOString(),
+    synced: 0
+  }
+
+  await db.zones.add(newZone)
+
+  setZones(prev =>
+    [...prev, newZone].sort(
+      (a, b) => new Date(a.created_at) - new Date(b.created_at)
+    )
+  )
+
+  if (navigator.onLine) {
+    const { synced, culture_nom, ...dataToSend } = newZone
+    const { error } = await supabase.from('zones').insert([dataToSend])
+
+    if (!error) {
+      await db.zones.update(id, { synced: 1 })
+      setZones(prev =>
+        prev.map(z => z.id === id ? { ...z, synced: 1 } : z)
+      )
     }
   }
+
+  return true
+}
 
 const confirmDeleteZone = async () => {
   // 🚫 INTERDIT OFFLINE
@@ -359,14 +390,24 @@ const confirmDeleteZone = async () => {
                   >
                     <div className="p-5 flex flex-col gap-4">
                       <div className="flex items-center gap-4">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center p-2 shadow-sm border border-slate-50 transition-transform group-hover:scale-110 duration-500 ${style.color}`}>
-                          <img 
-                            src={style.icon} 
-                            alt={zone.culture_nom || 'Culture'} 
-                            className="w-full h-full object-contain"
-                            onError={(e) => { e.target.src = '/assets/cultures/default.svg' }}
-                          />
-                        </div>
+                        <div
+  className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm border border-slate-50 transition-transform group-hover:scale-110 duration-500 ${
+    zone.culture_nom ? 'bg-white p-2' : 'bg-slate-100'
+  }`}
+>
+  {zone.culture_nom ? (
+    <img
+      src={style.icon}
+      alt={zone.culture_nom}
+      className="w-full h-full object-contain"
+      onError={(e) => {
+        e.currentTarget.src = '/assets/cultures/default.svg'
+      }}
+    />
+  ) : (
+<HelpCircle size={28} className="text-amber-500" />
+  )}
+</div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
@@ -514,7 +555,40 @@ const confirmDeleteZone = async () => {
     </div>
   </div>
 )}
+{surfaceError && (
+  <div className="fixed inset-0 z-[70] bg-black/40 backdrop-blur-sm flex items-center justify-center">
+    <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
 
+      <div className="flex items-center gap-3 mb-4">
+        <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center">
+          <AlertCircle size={24} />
+        </div>
+        <h3 className="text-lg font-black text-red-800">
+          Superficie insuffisante
+        </h3>
+      </div>
+
+      <p
+        className="text-sm text-slate-600 mb-6 leading-relaxed"
+        dangerouslySetInnerHTML={{
+          __html: `
+            ⚠️ La surface demandée dépasse la superficie disponible.<br/><br/>
+            <b>Surface demandée :</b> ${surfaceError.demande} HA<br/>
+            <b>Surface restante :</b> ${surfaceError.restante.toFixed(2)} HA<br/><br/>
+            Veuillez ajuster la superficie de l’unité culturale.
+          `
+        }}
+      />
+
+      <button
+        onClick={() => setSurfaceError(null)}
+        className="w-full py-3 rounded-xl bg-red-600 text-white font-black hover:bg-red-700"
+      >
+        Compris
+      </button>
+    </div>
+  </div>
+)}
     </div>
   )
 }

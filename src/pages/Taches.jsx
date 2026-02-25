@@ -77,17 +77,27 @@ export default function Taches({ user, setStep }) {
     if (navigator.onLine) {
       const { data, error } = await supabase
         .from('taches')
-        .select(`*, zone_cultures (cultures(nom), zones (nom))`)
+.select(`
+  *,
+  zone_cultures (
+    cultures ( nom ),
+    zones (
+      nom,
+      parcelles ( nom )
+    )
+  )
+`)
         .eq('user_id', user.id);
 
       if (data && !error) {
-        const formatted = data.map(t => ({
-          ...t,
-          user_id: user.id,
-          sync_status: 'synced',
-          nom_zone: t.zone_cultures?.zones?.nom || 'Zone inconnue',
-          nom_culture: t.zone_cultures?.cultures?.nom || ''
-        }));
+      const formatted = data.map(t => ({
+  ...t,
+  user_id: user.id,
+  sync_status: 'synced',
+  nom_zone: t.zone_cultures?.zones?.nom || 'Zone inconnue',
+  nom_parcelle: t.zone_cultures?.zones?.parcelles?.nom || 'Exploitation inconnue',
+  nom_culture: t.zone_cultures?.cultures?.nom || ''
+}));
         await db.tasks.bulkPut(formatted);
         setTaches(formatted);
       }
@@ -96,10 +106,21 @@ export default function Taches({ user, setStep }) {
 
   useEffect(() => { loadData(); }, [user?.id]);
 
-  const zonesList = useMemo(() => {
-    const zones = taches.map(t => t.nom_zone).filter(Boolean);
-    return ['all', ...new Set(zones)];
-  }, [taches]);
+ const zonesList = useMemo(() => {
+  const zones = taches
+    .map(t => ({
+      key: `${t.nom_parcelle}||${t.nom_zone}`,
+      label: `${t.nom_parcelle} • ${t.nom_zone}`,
+      nom_zone: t.nom_zone
+    }))
+    .filter(z => z.nom_zone);
+
+  const uniqueZones = Array.from(
+    new Map(zones.map(z => [z.key, z])).values()
+  );
+
+  return [{ key: 'all', label: 'Toutes les zones' }, ...uniqueZones];
+}, [taches]);
 
   const filteredTasks = useMemo(() => {
     return taches
@@ -107,8 +128,10 @@ export default function Taches({ user, setStep }) {
         const matchesFilter = filter === 'todo' ? !t.termine : t.termine;
         const matchesSearch = t.titre.toLowerCase().includes(searchQuery.toLowerCase()) || 
                               t.nom_zone?.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesZone = selectedZone === 'all' || t.nom_zone === selectedZone;
-        return matchesFilter && matchesSearch && matchesZone;
+const matchesZone =
+  selectedZone === 'all' ||
+  `${t.nom_parcelle}||${t.nom_zone}` === selectedZone;
+          return matchesFilter && matchesSearch && matchesZone;
       })
       .sort((a, b) => new Date(a.date_prevue) - new Date(b.date_prevue));
   }, [taches, filter, searchQuery, selectedZone]);
@@ -200,18 +223,23 @@ export default function Taches({ user, setStep }) {
           
           <div className="flex items-center gap-2 overflow-x-auto pb-1 no-scrollbar">
             {zonesList.map(zone => {
-              const style = getZoneStyle(zone);
-              const isActive = selectedZone === zone;
-              return (
-                <button
-                  key={zone}
-                  onClick={() => setSelectedZone(zone)}
-                  className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all border ${isActive ? 'bg-[#1A2E26] text-white border-[#1A2E26] shadow-md' : `${style.bg} ${style.text} ${style.border}`}`}
-                >
-                  {zone === 'all' ? 'Toutes les zones' : zone}
-                </button>
-              )
-            })}
+  const style = getZoneStyle(zone.nom_zone);
+  const isActive = selectedZone === zone.key;
+
+  return (
+    <button
+      key={zone.key}
+      onClick={() => setSelectedZone(zone.key)}
+      className={`flex-shrink-0 px-4 py-2 rounded-full text-[10px] font-black uppercase transition-all border
+        ${isActive
+          ? 'bg-[#1A2E26] text-white border-[#1A2E26] shadow-md'
+          : `${style.bg} ${style.text} ${style.border}`
+        }`}
+    >
+      {zone.label}
+    </button>
+  );
+})}
           </div>
         </section>
 

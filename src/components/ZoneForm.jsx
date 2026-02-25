@@ -15,20 +15,23 @@ export default function ZoneForm({
   // Calcul de la limite dynamique selon l'unité choisie pour l'affichage
   const displayLimit = unit === 'HA' ? surfaceRestanteHA : surfaceRestanteHA * 10000
 
-  async function submit(e) {
-    e.preventDefault()
-    if (!nom || !surface) return
+async function submit(e) {
+  e.preventDefault()
+  if (!nom || !surface) return
 
-    // Conversion pour le parent qui attend des HA
-    const surfaceNumHA = unit === 'm2' ? Number(surface) / 10000 : Number(surface)
+  const surfaceNumHA = unit === 'm2'
+    ? Number(surface) / 10000
+    : Number(surface)
 
-    const success = await onAdd({ nom, surface: surfaceNumHA })
 
-    if (success) {
-      setNom('')
-      setSurface('')
-    }
+
+  const success = await onAdd({ nom, surface: surfaceNumHA })
+
+  if (success) {
+    setNom('')
+    setSurface('')
   }
+}
 
   return (
     <form onSubmit={submit} className="space-y-4">
