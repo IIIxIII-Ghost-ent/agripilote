@@ -16,14 +16,19 @@ export default function Dashboard({
 }) {
   const [taches, setTaches] = useState([]);
   const [guideStep, setGuideStep] = useState(0); 
-  
+  const [guideInitialized, setGuideInitialized] = useState(false);
   // Activation automatique au premier lancement
   useEffect(() => {
-    const hasSeenGuide = localStorage.getItem(`guide_seen_${user?.id}`);
-    if (!hasSeenGuide && user?.id) {
-      setGuideStep(1);
-    }
-  }, [user?.id]);
+  if (!user?.id || guideInitialized) return;
+
+  const hasSeenGuide = localStorage.getItem(`guide_seen_${user.id}`);
+
+  if (!hasSeenGuide) {
+    setGuideStep(1);
+  }
+
+  setGuideInitialized(true);
+}, [user?.id, guideInitialized]);
 
   const closeGuideForever = () => {
     localStorage.setItem(`guide_seen_${user?.id}`, 'true');
