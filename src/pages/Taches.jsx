@@ -54,18 +54,37 @@ export default function Taches({ user, setStep }) {
         .select(`*, zone_cultures ( cultures ( nom ), zones ( nom, parcelles ( nom ) ) )`)
         .eq('user_id', user.id);
 
-      if (data && !error) {
-        const formatted = data.map(t => ({
-          ...t,
-          user_id: user.id,
-          sync_status: 'synced',
-          nom_zone: t.zone_cultures?.zones?.nom || 'Zone inconnue',
-          nom_parcelle: t.zone_cultures?.zones?.parcelles?.nom || 'Exploitation inconnue',
-          nom_culture: t.zone_cultures?.cultures?.nom || ''
-        }));
-        await db.tasks.bulkPut(formatted);
-        setTaches(formatted);
-      }
+    if (data && !error) {
+  const formatted = data.map(t => ({
+    ...t,
+    user_id: user.id,
+    sync_status: 'synced',
+    nom_zone: t.zone_cultures?.zones?.nom || 'Zone inconnue',
+    nom_parcelle: t.zone_cultures?.zones?.parcelles?.nom || 'Exploitation inconnue',
+    nom_culture: t.zone_cultures?.cultures?.nom || ''
+  }));
+
+  // 🔥 1️⃣ IDs venant du serveur
+  const serverIds = formatted.map(t => t.id);
+
+  // 🔥 2️⃣ SUPPRIMER de Dexie ce qui n'existe plus sur Supabase
+  await db.tasks
+    .where('user_id')
+    .equals(user.id)
+    .and(t => !serverIds.includes(t.id))
+    .delete();
+
+  // 🔁 3️⃣ Sync propre
+  await db.tasks.bulkPut(formatted);
+
+  // 🔄 4️⃣ Recharger Dexie (source unique)
+  const refreshed = await db.tasks
+    .where('user_id')
+    .equals(user.id)
+    .toArray();
+
+  setTaches(refreshed);
+}
     }
   };
 
