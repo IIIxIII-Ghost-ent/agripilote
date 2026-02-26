@@ -3,7 +3,7 @@ import {
   Sun, Droplets, MapPin, Calendar, TrendingUp, 
   Plus, Microscope, ChevronRight, AlertTriangle, Clock, CloudRain,
   Leaf, Sprout, ThermometerSun, Waves, Landmark, LayoutGrid, Activity,
-  Wind, Navigation, Sunrise, Sunset, Info, HelpCircle, X
+  Wind, Navigation, Sunrise, Sunset, Info, HelpCircle, X, ChevronLeft, CheckCircle2
 } from 'lucide-react';
 import { db } from '../lib/db';
 
@@ -15,8 +15,21 @@ export default function Dashboard({
   openNewFieldForm
 }) {
   const [taches, setTaches] = useState([]);
-  const [showGuide, setShowGuide] = useState(false);
+  const [guideStep, setGuideStep] = useState(0); 
   
+  // Activation automatique au premier lancement
+  useEffect(() => {
+    const hasSeenGuide = localStorage.getItem(`guide_seen_${user?.id}`);
+    if (!hasSeenGuide && user?.id) {
+      setGuideStep(1);
+    }
+  }, [user?.id]);
+
+  const closeGuideForever = () => {
+    localStorage.setItem(`guide_seen_${user?.id}`, 'true');
+    setGuideStep(0);
+  };
+
   const getSunIcon = () => {
     const hour = new Date().getHours();
     if (hour >= 6 && hour < 14) return <Sunrise size={40} strokeWidth={1.5} className="text-amber-400" />;
@@ -92,8 +105,49 @@ export default function Dashboard({
     };
   }, [taches, parcelles, zoneCultures]);
 
+  // LA BULLE D'AIDE (S'affiche dynamiquement sur l'élément)
+  const TutorialPopUp = ({ title, text, position = "bottom" }) => (
+    <div className={`absolute left-1/2 -translate-x-1/2 z-[300] w-[280px] animate-in zoom-in-95 duration-300 ${position === 'bottom' ? 'top-full mt-6' : 'bottom-full mb-6'}`}>
+      <div className="bg-white border-2 border-amber-400 p-5 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.3)] text-center relative">
+        <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-l-2 border-t-2 border-amber-400 rotate-45 ${position === 'bottom' ? '-top-2.5' : '-bottom-2.5 rotate-[225deg]'}`} />
+        
+        <div className="flex justify-center mb-2">
+            <div className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">Étape {guideStep} / 5</div>
+        </div>
+
+        <h4 className="text-[#1A2E26] font-black text-xs uppercase tracking-widest mb-2">{title}</h4>
+        <p className="text-slate-600 text-[13px] font-bold leading-snug mb-5">{text}</p>
+        
+        <div className="flex gap-2">
+            {guideStep > 1 && (
+                <button onClick={(e) => {e.stopPropagation(); setGuideStep(p => p-1)}} className="flex-1 py-3 rounded-2xl bg-slate-100 text-[#1A2E26] text-[10px] font-black uppercase">Retour</button>
+            )}
+            <button 
+                onClick={(e) => {e.stopPropagation(); guideStep < 5 ? setGuideStep(p => p+1) : closeGuideForever()}} 
+                className="flex-[2] bg-emerald-700 text-white py-3 rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-emerald-900/20 active:scale-95 transition-transform"
+            >
+                {guideStep === 5 ? "Compris !" : "Suivant"}
+            </button>
+        </div>
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26]">
+      {/* Bouton d'aide flottant permanent */}
+      <button 
+        onClick={() => setGuideStep(1)}
+        className="fixed bottom-24 right-6 z-[400] w-14 h-14 bg-amber-500 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all border-4 border-white"
+      >
+        <HelpCircle size={28} />
+      </button>
+
+      {/* Overlay sombre pour le focus */}
+      {guideStep > 0 && (
+        <div className="fixed inset-0 bg-[#1A2E26]/80 backdrop-blur-[3px] z-[150] transition-opacity duration-500" onClick={() => setGuideStep(0)} />
+      )}
+      
       <div 
         className="fixed inset-0 opacity-[0.03] pointer-events-none" 
         style={{ 
@@ -107,149 +161,93 @@ export default function Dashboard({
         <div className="flex justify-between items-center px-2">
            <div className="flex items-center gap-2">
               <Sprout className="text-emerald-700" size={20} />
-              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Tableau de Bord</span>
+              <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Dashboard</span>
            </div>
-           <button 
-            onClick={() => setShowGuide(!showGuide)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
-           >
-             {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
-             <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
-           </button>
         </div>
 
-        {/* WEATHER BANNER */}
-        <header className="relative group overflow-hidden bg-gradient-to-br from-[#064e3b] via-[#064e3b] to-[#022c22] rounded-[3rem] p-8 text-white shadow-[0_20px_50px_rgba(6,78,59,0.3)]">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
-              <Sun className="text-amber-400 mb-2" size={32} />
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Météo Agricole</p>
-              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Prévoyez vos arrosages selon la température et les risques de pluie locaux.</p>
-            </div>
-          )}
-          <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-amber-400/10 rounded-full blur-3xl" />
-          <div className="relative z-10 space-y-6">
-            <div className="flex justify-between items-start">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="h-1 w-8 bg-amber-400 rounded-full" />
-                  <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400/80">Sénégal • {weather.city}</span>
+        {/* ÉTAPE 1: MÉTÉO */}
+        <header className={`relative transition-all duration-500 ${guideStep === 1 ? 'z-[200] scale-[1.02]' : ''}`}>
+          {guideStep === 1 && <TutorialPopUp title="Climat en Direct" text="Consultez la météo précise de vos terres pour planifier vos arrosages." />}
+          <div className={`bg-gradient-to-br from-[#064e3b] via-[#064e3b] to-[#022c22] rounded-[3rem] p-8 text-white shadow-xl overflow-hidden ${guideStep === 1 ? 'ring-4 ring-amber-400' : ''}`}>
+            <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-amber-400/10 rounded-full blur-3xl" />
+            <div className="relative z-10 space-y-6">
+                <div className="flex justify-between items-start">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2 mb-2">
+                            <div className="h-1 w-8 bg-amber-400 rounded-full" />
+                            <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400/80">{weather.city}</span>
+                        </div>
+                        <h1 className="text-3xl font-serif font-medium tracking-tight">Dalal ak jamm, <br/>
+                        <span className="italic font-bold text-white capitalize">{user?.user_metadata?.nom || user?.email?.split('@')[0]}</span>
+                        </h1>
+                    </div>
+                    <div className="flex flex-col items-center bg-white/10 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/20 min-w-[90px]">
+                        {weather.icon}
+                        <span className="text-2xl font-black mt-1 tracking-tighter">{weather.temp}°C</span>
+                    </div>
                 </div>
-                <h1 className="text-3xl font-serif font-medium tracking-tight">
-                  Dalal ak jamm, <br/>
-                  <span className="italic font-bold text-white capitalize">{user?.user_metadata?.nom || user?.email?.split('@')[0]}</span>
-                </h1>
-              </div>
-              <div className="flex flex-col items-center bg-white/10 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/20 min-w-[90px]">
-                {weather.icon}
-                <span className="text-2xl font-black mt-1 tracking-tighter">{weather.temp}°C</span>
-              </div>
-            </div>
-            <div className="flex gap-4 pt-4 border-t border-white/10">
-              <WeatherDetail icon={<Waves size={16} />} label="Eau" value={`${weather.humidity}%`} color="text-blue-300" />
-              <WeatherDetail icon={<CloudRain size={16} />} label="Pluie" value={`${weather.rain}mm`} color="text-cyan-300" />
-              <WeatherDetail icon={<Wind size={16} />} label="Vent" value="12km/h" color="text-emerald-300" />
+                <div className="flex gap-4 pt-4 border-t border-white/10">
+                    <WeatherDetail icon={<Waves size={16} />} label="Humidité" value={`${weather.humidity}%`} color="text-blue-300" />
+                    <WeatherDetail icon={<CloudRain size={16} />} label="Pluie" value={`${weather.rain}mm`} color="text-cyan-300" />
+                    <WeatherDetail icon={<Wind size={16} />} label="Vent" value="12km/h" color="text-emerald-300" />
+                </div>
             </div>
           </div>
         </header>
 
-        {/* STATS GRID AVEC RETOURNEMENT */}
-        <div className="grid grid-cols-2 gap-4">
-          <StatBox 
-            label="Ma Terre" 
-            value={stats.surface.toFixed(1)} 
-            unit="HA" 
-            icon={<LayoutGrid className="text-emerald-600" size={24} />} 
-            circleColor="bg-emerald-50"
-            showGuide={showGuide}
-            guideText="Surface totale de tous vos champs enregistrés sur AgriPilote."
-          />
-          <StatBox 
-            label="Mes Espèces" 
-            value={stats.cultures} 
-            unit="TYPES" 
-            icon={<Sprout className="text-amber-600" size={24} />} 
-            circleColor="bg-amber-50"
-            showGuide={showGuide}
-            guideText="Nombre de variétés différentes que vous cultivez actuellement."
-          />
-          <StatBox 
-            label="Travail" 
-            value={stats.aFaire} 
-            unit="ACTIONS" 
-            icon={<Activity className={stats.retard > 0 ? "text-rose-600" : "text-orange-600"} size={24} />} 
-            circleColor={stats.retard > 0 ? "bg-rose-50" : "bg-orange-50"}
-            isUrgent={stats.retard > 0}
-            showGuide={showGuide}
-            guideText="Tâches urgentes ou prévues pour aujourd'hui dans votre agenda."
-          />
-          <StatBox 
-            label="Mes Champs" 
-            value={parcelles.length} 
-            unit="UNITÉS" 
-            icon={<Landmark className="text-blue-600" size={24} />} 
-            circleColor="bg-blue-50"
-            showGuide={showGuide}
-            guideText="Nombre total de parcelles cartographiées dans votre domaine."
-          />
+        {/* ÉTAPE 2: STATISTIQUES */}
+        <div className={`relative grid grid-cols-2 gap-4 transition-all duration-500 ${guideStep === 2 ? 'z-[200] scale-[1.02]' : ''}`}>
+          {guideStep === 2 && <TutorialPopUp title="Indicateurs Clés" text="Gardez un œil sur votre surface totale et vos travaux en cours." />}
+          <DataDisplay label="Surface" value={stats.surface.toFixed(1)} unit="Ha" icon={<LayoutGrid size={18} />} color="emerald" />
+          <DataDisplay label="Variétés" value={stats.cultures} unit="Types" icon={<Sprout size={18} />} color="amber" />
+          <DataDisplay label="Actions" value={stats.aFaire} unit="Tasks" icon={<Activity size={18} />} color={stats.retard > 0 ? "rose" : "orange"} urgent={stats.retard > 0} />
+          <DataDisplay label="Parcelles" value={parcelles.length} unit="Unités" icon={<Landmark size={18} />} color="blue" />
         </div>
 
-        {/* ACTIONS MAJEURES AVEC RETOURNEMENT */}
-        <div className="grid grid-cols-1 gap-4">
-          <div className="relative group">
-            {showGuide && (
-              <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
-                <Navigation className="text-amber-400 mb-1" size={24} />
-                <p className="text-[10px] font-black uppercase text-amber-400 mb-1">Cartographie</p>
-                <p className="text-xs text-emerald-50 font-medium">Délimitez vos parcelles sur le GPS pour un suivi précis.</p>
+        {/* ÉTAPE 3: AJOUTER CHAMP */}
+        <div className={`relative transition-all duration-500 ${guideStep === 3 ? 'z-[200] scale-[1.02]' : ''}`}>
+          {guideStep === 3 && <TutorialPopUp title="Nouvelle Parcelle" text="Enregistrer vos champs pour démarrer votre suivi digital." />}
+          <button 
+            onClick={openNewFieldForm}
+            className={`w-full relative h-28 bg-[#1A2E26] rounded-[2.5rem] flex items-center px-8 text-white transition-all active:scale-[0.98] shadow-xl overflow-hidden ${guideStep === 3 ? 'ring-4 ring-amber-400' : ''}`}
+          >
+            <div className="absolute right-0 top-0 h-full w-48 bg-emerald-500/5 -skew-x-12 translate-x-10" />
+            <div className="flex items-center gap-6 z-10">
+              <div className="w-16 h-16 rounded-3xl bg-amber-500 flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
+                <Plus size={32} strokeWidth={3} />
               </div>
-            )}
-            <button 
-              onClick={openNewFieldForm}
-              className="w-full relative h-28 bg-[#1A2E26] rounded-[2.5rem] flex items-center px-8 text-white transition-all active:scale-[0.98] shadow-xl overflow-hidden"
-            >
-              <div className="absolute right-0 top-0 h-full w-48 bg-emerald-500/5 -skew-x-12 translate-x-10 group-hover:translate-x-0 transition-transform duration-700" />
-              <div className="flex items-center gap-6 z-10">
-                <div className="w-16 h-16 rounded-3xl bg-amber-500 flex items-center justify-center text-white shadow-lg group-hover:rotate-90 transition-transform">
-                  <Plus size={32} strokeWidth={3} />
-                </div>
-                <div className="text-left">
-                  <p className="text-xl font-bold tracking-tight uppercase">Ajouter un champ</p>
-                  <p className="text-xs text-emerald-400 font-medium opacity-80 italic underline underline-offset-4">Déclarer une nouvelle parcelle</p>
-                </div>
+              <div className="text-left">
+                <p className="text-xl font-bold tracking-tight uppercase leading-none mb-1">Ajouter un champ</p>
+                <p className="text-xs text-emerald-400 font-medium italic underline underline-offset-4">Déclarer une nouvelle Exploitation agricole </p>
               </div>
-              <Navigation className="absolute right-8 opacity-10 group-hover:translate-x-2 transition-transform" size={40} />
-            </button>
-          </div>
-
-          <div className="relative group">
-            {showGuide && (
-              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[2rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
-                <Microscope className="text-amber-600 mb-1" size={24} />
-                <p className="text-[10px] font-black uppercase text-amber-600 mb-1">Diagnostic IA</p>
-                <p className="text-xs text-slate-600 font-bold">Identifiez les maladies des plantes avec une simple photo.</p>
-              </div>
-            )}
-            <button 
-              onClick={() => setStep('diagnostic')}
-              className="w-full relative h-24 bg-white rounded-[2rem] flex items-center px-8 text-[#1A2E26] border border-[#E8E2D9] transition-all active:scale-[0.98] shadow-sm hover:border-amber-200"
-            >
-              <div className="flex items-center gap-6">
-                <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100">
-                  <Microscope size={28} strokeWidth={1.5} />
-                </div>
-                <div className="text-left">
-                  <p className="text-lg font-bold tracking-tight uppercase">Docteur Plantes IA</p>
-                  <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Analyse & Santé</p>
-                </div>
-              </div>
-              <ChevronRight className="ml-auto text-amber-500 group-hover:translate-x-2 transition-transform" />
-            </button>
-          </div>
+            </div>
+            <Navigation className="absolute right-8 opacity-10" size={40} />
+          </button>
         </div>
 
-        {/* SECTION AGENDA */}
-        <section className="space-y-6 relative">
+        {/* ÉTAPE 4: DIAGNOSTIC IA */}
+        <div className={`relative transition-all duration-500 ${guideStep === 4 ? 'z-[200] scale-[1.02]' : ''}`}>
+          {guideStep === 4 && <TutorialPopUp title="Diagnostic Intelligent" text="Analysez l'état de votre culture : sélectionnez les signes visibles pour identifier la pathologie." />}
+          <button 
+            onClick={() => setStep('diagnostic')}
+            className={`w-full relative h-24 bg-white rounded-[2rem] flex items-center px-8 text-[#1A2E26] border-2 transition-all active:scale-[0.98] shadow-sm ${guideStep === 4 ? 'border-amber-400' : 'border-[#E8E2D9]'}`}
+          >
+            <div className="flex items-center gap-6">
+              <div className="w-14 h-14 rounded-2xl bg-amber-50 flex items-center justify-center text-amber-600 border border-amber-100">
+                <Microscope size={28} strokeWidth={1.5} />
+              </div>
+              <div className="text-left">
+                <p className="text-lg font-bold tracking-tight uppercase">Docteur Plantes IA</p>
+                <p className="text-[10px] text-slate-400 font-black uppercase tracking-widest">Analyse & Santé</p>
+              </div>
+            </div>
+            <ChevronRight className="ml-auto text-amber-500" />
+          </button>
+        </div>
+
+        {/* ÉTAPE 5: AGENDA */}
+        <section className={`relative space-y-6 transition-all duration-500 ${guideStep === 5 ? 'z-[200] scale-[1.02]' : ''}`}>
+          {guideStep === 5 && <TutorialPopUp title="Votre Agenda" text="Retrouvez ici vos rappels d'arrosage, d'engrais et de récolte." position="top" />}
           <div className="flex justify-between items-center px-2">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-amber-500 rounded-full" />
@@ -258,45 +256,32 @@ export default function Dashboard({
             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full">{stats.aFaire} tâches</span>
           </div>
 
-          {dashboardTasks.length === 0 ? (
-            <div className="bg-white rounded-[3rem] p-12 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center relative overflow-hidden">
-               {showGuide && (
-                <div className="absolute inset-0 z-20 bg-emerald-50/95 backdrop-blur-sm p-8 flex flex-col items-center justify-center text-center animate-in fade-in duration-300">
-                  <Calendar className="text-emerald-600 mb-2" size={24} />
-                  <p className="text-xs font-bold uppercase text-emerald-800 mb-1">Gestion des tâches</p>
-                  <p className="text-xs font-serif italic text-emerald-700">Toutes vos activités (arrosage, récolte) apparaîtront ici.</p>
+          <div className={`space-y-4 p-1 rounded-[2.5rem] ${guideStep === 5 ? 'bg-white ring-4 ring-amber-400' : ''}`}>
+            {dashboardTasks.length === 0 ? (
+                <div className="bg-white rounded-[3rem] p-12 border-2 border-dashed border-emerald-100 text-center flex flex-col items-center">
+                    <Leaf size={32} className="text-emerald-500 mb-4 opacity-30" />
+                    <p className="text-sm font-serif italic text-slate-400">Aucune tâche prévue aujourd'hui.</p>
                 </div>
-              )}
-              <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center text-emerald-500 mb-4 shadow-inner">
-                <Leaf size={32} />
-              </div>
-              <p className="text-sm font-medium text-slate-500 font-serif italic max-w-[200px]">Votre jardin repose en paix. Tout est à jour.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {dashboardTasks.slice(0, 3).map(t => {
-                const isLate = getStatus(t) === 'late';
-                return (
-                  <div 
-                    key={t.id} 
-                    onClick={() => setStep('taches')}
-                    className={`group bg-white p-6 rounded-[2.5rem] border transition-all hover:shadow-xl flex items-center gap-5 cursor-pointer ${isLate ? 'border-rose-100 bg-rose-50/10' : 'border-[#E8E2D9] hover:border-emerald-200'}`}
-                  >
-                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${isLate ? 'bg-rose-500 text-white shadow-rose-200' : 'bg-emerald-600 text-white shadow-emerald-200'}`}>
-                      {isLate ? <AlertTriangle size={24} /> : <Calendar size={24} />}
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-[9px] font-black uppercase tracking-widest mb-1 ${isLate ? 'text-rose-500' : 'text-emerald-700'}`}>
-                        {isLate ? "⚠️ Retard Critique" : "🕒 Action Requise"}
-                      </p>
-                      <h4 className="font-bold text-lg text-slate-800 leading-tight tracking-tight">{t.titre}</h4>
-                    </div>
-                    <ChevronRight size={18} className="text-slate-300 group-hover:text-emerald-600 group-hover:translate-x-1 transition-all" />
-                  </div>
-                );
-              })}
-            </div>
-          )}
+            ) : (
+                dashboardTasks.slice(0, 3).map(t => {
+                    const isLate = getStatus(t) === 'late';
+                    return (
+                        <div key={t.id} onClick={() => setStep('taches')} className={`bg-white p-6 rounded-[2.5rem] border flex items-center gap-5 cursor-pointer hover:border-emerald-200 transition-colors ${isLate ? 'border-rose-100' : 'border-[#E8E2D9]'}`}>
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${isLate ? 'bg-rose-500 text-white' : 'bg-emerald-600 text-white'}`}>
+                                {isLate ? <AlertTriangle size={24} /> : <Calendar size={24} />}
+                            </div>
+                            <div className="flex-1">
+                                <p className={`text-[9px] font-black uppercase mb-1 ${isLate ? 'text-rose-500' : 'text-emerald-700'}`}>
+                                    {isLate ? "⚠️ Retard" : "🕒 Prochaine Action"}
+                                </p>
+                                <h4 className="font-bold text-lg text-slate-800 leading-tight tracking-tight">{t.titre}</h4>
+                            </div>
+                            <ChevronRight size={18} className="text-slate-300" />
+                        </div>
+                    );
+                })
+            )}
+          </div>
         </section>
       </div>
     </div>
@@ -315,29 +300,35 @@ function WeatherDetail({ icon, label, value, color }) {
   );
 }
 
-function StatBox({ label, value, unit, icon, circleColor, isUrgent, showGuide, guideText }) {
+function DataDisplay({ label, value, unit, icon, color, urgent }) {
+  const colors = {
+    emerald: "bg-emerald-50 text-emerald-700 border-emerald-100",
+    amber: "bg-amber-50 text-amber-700 border-amber-100",
+    orange: "bg-orange-50 text-orange-700 border-orange-100",
+    rose: "bg-rose-50 text-rose-700 border-rose-100",
+    blue: "bg-blue-50 text-blue-700 border-blue-100"
+  };
+
   return (
-    <div className={`relative overflow-hidden bg-white p-6 rounded-[2.5rem] border border-[#E8E2D9] shadow-sm transition-all hover:shadow-md group ${isUrgent ? 'ring-2 ring-rose-500/10' : ''}`}>
-      {/* OVERLAY DE GUIDE (RETOURNOIR) */}
-      {showGuide && (
-        <div className="absolute inset-0 z-20 bg-amber-500/95 backdrop-blur-sm p-4 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
-          <Info className="text-white mb-1" size={20} />
-          <p className="text-[10px] font-black uppercase text-white mb-1 tracking-widest">{label}</p>
-          <p className="text-[10px] text-amber-50 font-bold leading-tight">{guideText}</p>
-        </div>
-      )}
-      
-      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center mb-4 transition-transform group-hover:scale-110 ${circleColor}`}>
+    <div className={`p-5 rounded-[2rem] bg-white border border-[#E8E2D9] flex flex-col gap-3 relative overflow-hidden`}>
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${colors[color]} border shadow-sm`}>
         {icon}
       </div>
-      <div className="space-y-1">
+      <div>
         <div className="flex items-baseline gap-1">
-          <span className="text-3xl font-black tracking-tighter text-slate-900">{value}</span>
-          <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{unit}</span>
+          <span className="text-2xl font-black text-slate-900 tracking-tighter">{value}</span>
+          <span className="text-[10px] font-bold text-slate-400 lowercase">{unit}</span>
         </div>
-        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-tight opacity-60 italic">{label}</p>
+        <p className="text-[9px] font-black uppercase tracking-wider text-slate-400 mt-1">{label}</p>
       </div>
-      {isUrgent && <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-rose-500 animate-ping" />}
+      {urgent && (
+        <div className="absolute top-4 right-4 flex items-center gap-1">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500"></span>
+          </span>
+        </div>
+      )}
     </div>
   );
 }

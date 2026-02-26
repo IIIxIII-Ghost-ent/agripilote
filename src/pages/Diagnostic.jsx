@@ -84,10 +84,12 @@ export default function Diagnostic({ user, setStep }) {
   const [loading, setLoading] = useState(true)
   const [historyActions, setHistoryActions] = useState(null)
   const [diagError, setDiagError] = useState(null)
-  const [showGuide, setShowGuide] = useState(false)
   const [diagToDelete, setDiagToDelete] = useState(null)
   const [offlineDeleteError, setOfflineDeleteError] = useState(false)
   const online = navigator.onLine
+
+  // LOGIQUE DU GUIDE DYNAMIQUE
+  const [guideStep, setGuideStep] = useState(0);
 
   const categorizedSymptoms = useMemo(() => {
     const categories = {
@@ -324,6 +326,37 @@ export default function Diagnostic({ user, setStep }) {
     setDiagToDelete(null)
   }
 
+  // COMPOSANT BULLE D'AIDE TUTORIEL
+  const TutorialPopUp = ({ title, text, position = "bottom" }) => {
+    // Condition pour bloquer l'étape 2
+    const isStep2Blocked = guideStep === 2 && !selectedZone;
+
+    return (
+      <div className={`absolute left-1/2 -translate-x-1/2 z-[500] w-[280px] animate-in zoom-in-95 duration-300 ${position === 'bottom' ? 'top-full mt-6' : 'bottom-full mb-6'}`}>
+        <div className="bg-white border-2 border-amber-400 p-5 rounded-[2rem] shadow-[0_20px_50px_rgba(0,0,0,0.4)] text-center relative">
+          <div className={`absolute left-1/2 -translate-x-1/2 w-4 h-4 bg-white border-l-2 border-t-2 border-amber-400 rotate-45 ${position === 'bottom' ? '-top-2.5' : '-bottom-2.5 rotate-[225deg]'}`} />
+          <div className="flex justify-center mb-2">
+              <div className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter">Guide • {guideStep}/4</div>
+          </div>
+          <h4 className="text-[#1A2E26] font-black text-xs uppercase tracking-widest mb-2">{title}</h4>
+          <p className="text-slate-600 text-[13px] font-bold leading-snug mb-5">{text}</p>
+          <div className="flex gap-2">
+              {guideStep > 1 && (
+                  <button onClick={(e) => {e.stopPropagation(); setGuideStep(p => p-1)}} className="flex-1 py-3 rounded-2xl bg-slate-100 text-[#1A2E26] text-[10px] font-black uppercase">Retour</button>
+              )}
+              <button 
+                  disabled={isStep2Blocked}
+                  onClick={(e) => {e.stopPropagation(); guideStep < 4 ? setGuideStep(p => p+1) : setGuideStep(0)}} 
+                  className={`flex-[2] py-3 rounded-2xl text-[10px] font-black uppercase shadow-lg transition-transform active:scale-95 ${isStep2Blocked ? 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none' : 'bg-emerald-700 text-white shadow-emerald-900/20'}`}
+              >
+                  {guideStep === 4 ? "Terminer" : "Suivant"}
+              </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   if (loading) return (
     <div className="min-h-screen bg-[#FDFCF9] flex flex-col items-center justify-center gap-4">
       <div className="relative">
@@ -336,6 +369,19 @@ export default function Diagnostic({ user, setStep }) {
 
   return (
     <div className="min-h-screen bg-[#FDFCF9] pb-32 font-sans text-[#1A2E26]">
+      {/* BOUTON AIDE FLOTTANT */}
+      <button 
+        onClick={() => setGuideStep(1)}
+        className="fixed bottom-24 right-6 z-[400] w-14 h-14 bg-amber-500 text-white rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-90 transition-all border-4 border-white"
+      >
+        <HelpCircle size={28} />
+      </button>
+
+      {/* OVERLAY TUTO */}
+      {guideStep > 0 && (
+        <div className="fixed inset-0 bg-[#1A2E26]/80 backdrop-blur-[3px] z-[150] transition-opacity duration-500" onClick={() => setGuideStep(0)} />
+      )}
+
       <div className="fixed inset-0 opacity-[0.03] pointer-events-none" 
            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%231A2E26' fill-rule='evenodd'%3E%3Cpath d='M30 0h2v10h-2zm0 50h2v10h-2zM0 30h10v2H0zm50 0h10v2H50zM14.5 14.5h2v2h-2zm30 30h2v2h-2z'/%3E%3C/g%3E%3C/svg%3E")` }} />
 
@@ -348,26 +394,16 @@ export default function Diagnostic({ user, setStep }) {
               <span className="text-[10px] font-black uppercase tracking-[0.4em] text-emerald-800/50">Analyse Phytosanitaire</span>
            </div>
            <button 
-            onClick={() => setShowGuide(!showGuide)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all z-30 ${showGuide ? 'bg-amber-500 text-white shadow-lg' : 'bg-white text-emerald-800 border border-[#E8E2D9]'}`}
-           >
-             {showGuide ? <X size={16} /> : <HelpCircle size={16} />}
-             <span className="text-[10px] font-black uppercase tracking-widest">{showGuide ? "Fermer" : "Guide"}</span>
-           </button>
-        </div>
-
-        {/* Header */}
-        <header className="relative overflow-hidden bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-2xl">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-[#1A2E26]/95 backdrop-blur-md p-6 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-300">
-              <Microscope className="text-amber-400 mb-2" size={32} />
-              <p className="text-xs font-bold uppercase tracking-widest text-amber-400 mb-1">Expertise Phytosanitaire</p>
-              <p className="text-sm font-serif italic text-emerald-50 max-w-[240px]">Identifiez les maladies de vos cultures en sélectionnant les symptômes observés sur le terrain.</p>
-            </div>
-          )}
-          <button onClick={() => setStep('dashboard')} className="absolute top-6 left-6 w-10 h-10 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-white active:scale-90 transition-all z-20">
+            onClick={() => setStep('dashboard')}
+            className="w-10 h-10 rounded-2xl bg-white border border-[#E8E2D9] flex items-center justify-center text-[#1A2E26] active:scale-90 transition-all shadow-sm"
+          >
             <ArrowLeft size={20} />
           </button>
+        </div>
+
+        {/* Header - ÉTAPE 1 DU TUTO */}
+        <header className={`relative overflow-visible bg-gradient-to-br from-[#1A2E26] to-[#0A261D] rounded-[3rem] p-8 text-white shadow-2xl transition-all duration-500 ${guideStep === 1 ? 'z-[200] scale-[1.02] ring-4 ring-amber-400' : 'z-10'}`}>
+          {guideStep === 1 && <TutorialPopUp title="Expertise Digitale" text="Identifiez les maladies de vos cultures en sélectionnant les symptômes observés sur le terrain." />}
           
           <div className="relative z-10 text-center space-y-2 pt-4">
             <div className="flex justify-center items-center gap-2">
@@ -378,7 +414,7 @@ export default function Diagnostic({ user, setStep }) {
             <h1 className="text-3xl font-serif font-medium">Santé des Plantes</h1>
             <div className="flex items-center justify-center gap-2">
                 <div className={`w-1.5 h-1.5 rounded-full ${online ? 'bg-emerald-400' : 'bg-orange-400 animate-pulse'}`} />
-                <p className="text-[9px] font-black text-white/40 uppercase tracking-widest">
+                <p className="text-[9px] font-black text-white/60 uppercase tracking-widest">
                   {online ? 'Données synchronisées' : 'Mode hors-ligne'}
                 </p>
             </div>
@@ -386,22 +422,16 @@ export default function Diagnostic({ user, setStep }) {
           <Microscope className="absolute right-[-20px] bottom-[-20px] text-white/5 w-48 h-48 rotate-12" />
         </header>
 
-        {/* SECTION 1: SÉLECTEUR DE ZONE */}
-        <section className="space-y-4 relative group">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-emerald-900/95 backdrop-blur-md rounded-[2.5rem] flex flex-col items-center justify-center text-center p-4 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
-              <Layers className="text-amber-400 mb-1" size={24} />
-              <p className="text-[10px] font-black uppercase text-amber-400">Choix de la parcelle</p>
-              <p className="text-[10px] text-emerald-50">Sélectionnez l'unité culturale à inspecter aujourd'hui.</p>
-            </div>
-          )}
+        {/* SECTION 1: SÉLECTEUR DE ZONE - ÉTAPE 2 DU TUTO */}
+        <section className={`space-y-4 relative transition-all duration-500 ${guideStep === 2 ? 'z-[200] scale-[1.02]' : 'z-10'}`}>
+          {guideStep === 2 && <TutorialPopUp title="Choix de la parcelle" text="Sélectionnez l'unité culturale à inspecter aujourd'hui pour charger ses maladies spécifiques." />}
           <div className="flex items-center gap-3 px-2">
             <div className="w-8 h-8 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-700 shadow-sm">
               <Layers size={14} />
             </div>
             <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-[#1A2E26]/60">Étape 1 : Localiser le problème</h3>
           </div>
-          <div className="grid grid-cols-1 gap-3">
+          <div className={`grid grid-cols-1 gap-3 p-1 rounded-[2.5rem] transition-all ${guideStep === 2 ? 'bg-white ring-4 ring-amber-400' : ''}`}>
             {zones.map(z => {
               const isSelected = selectedZone?.id === z.id;
               return (
@@ -425,16 +455,10 @@ export default function Diagnostic({ user, setStep }) {
           </div>
         </section>
 
-        {/* SECTION 2: SÉLECTEUR DE SYMPTÔMES */}
+        {/* SECTION 2: SÉLECTEUR DE SYMPTÔMES - ÉTAPE 3 DU TUTO */}
         {selectedZone && (
-          <section className="space-y-6 animate-in slide-in-from-bottom-10 duration-700 relative group">
-            {showGuide && (
-              <div className="absolute inset-0 z-20 bg-white/95 backdrop-blur-md rounded-[3rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in zoom-in duration-300 border-2 border-amber-500">
-                <AlertCircle className="text-amber-600 mb-2" size={32} />
-                <p className="text-xs font-black uppercase text-amber-600 mb-1">Observation des symptômes</p>
-                <p className="text-sm text-slate-600 font-medium">Naviguez par catégorie et cochez ce que vous voyez sur la plante. Plus vous en mettez, plus le diagnostic est précis.</p>
-              </div>
-            )}
+          <section className={`space-y-6 relative transition-all duration-500 ${guideStep === 3 ? 'z-[200] scale-[1.02]' : 'z-10'}`}>
+            {guideStep === 3 && <TutorialPopUp title="Observation" text="Naviguez par catégorie et cochez ce que vous voyez. Plus vous en mettez, plus le diagnostic est précis." />}
             <div className="flex flex-col gap-4">
                <div className="flex items-center justify-between px-2">
                  <div className="flex items-center gap-3">
@@ -554,15 +578,9 @@ export default function Diagnostic({ user, setStep }) {
           </section>
         )}
 
-        {/* SECTION 4: HISTORIQUE */}
-        <section className="space-y-6 relative group">
-          {showGuide && (
-            <div className="absolute inset-0 z-20 bg-[#FDFCF9]/90 backdrop-blur-sm rounded-[2.5rem] flex flex-col items-center justify-center text-center p-8 animate-in fade-in duration-300 border-2 border-dashed border-amber-500">
-              <History className="text-amber-600 mb-2" size={32} />
-              <p className="text-xs font-black uppercase text-amber-600 mb-1">Archives d'analyses</p>
-              <p className="text-sm text-slate-600 font-medium italic">Retrouvez tous vos anciens diagnostics. Cliquez sur une fiche pour revoir les solutions préconisées par l'expert.</p>
-            </div>
-          )}
+        {/* SECTION 4: HISTORIQUE - ÉTAPE 4 DU TUTO */}
+        <section className={`space-y-6 relative transition-all duration-500 ${guideStep === 4 ? 'z-[200] scale-[1.02]' : 'z-10'}`}>
+          {guideStep === 4 && <TutorialPopUp title="Archives" text="Retrouvez ici tous vos anciens diagnostics et les protocoles de soin préconisés." position="top" />}
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-3">
               <div className="w-1.5 h-6 bg-[#1A2E26] rounded-full" />
@@ -583,18 +601,19 @@ export default function Diagnostic({ user, setStep }) {
               history.map(h => (
                 <div 
                   key={h.id}
-onClick={() =>
-  setHistoryActions(
-    h.actions_snapshot || {
-      maladie_nom: h.maladie_nom,
-      culture_nom: '—',
-      date: h.created_at,
-      actions_bio: "Aucune action enregistrée pour ce diagnostic.",
-      prevention: "Non disponible.",
-      conseil: "Relancez un diagnostic pour obtenir des recommandations complètes."
-    }
-  )
-}                  className="bg-white p-5 rounded-[2.5rem] border border-[#E8E2D9] flex items-center gap-4 hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer relative overflow-hidden"
+                  onClick={() =>
+                    setHistoryActions(
+                      h.actions_snapshot || {
+                        maladie_nom: h.maladie_nom,
+                        culture_nom: '—',
+                        date: h.created_at,
+                        actions_bio: "Aucune action enregistrée pour ce diagnostic.",
+                        prevention: "Non disponible.",
+                        conseil: "Relancez un diagnostic pour obtenir des recommandations complètes."
+                      }
+                    )
+                  }
+                  className="bg-white p-5 rounded-[2.5rem] border border-[#E8E2D9] flex items-center gap-4 hover:shadow-lg transition-all active:scale-[0.98] group cursor-pointer relative overflow-hidden"
                 >
                   <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-[#1A2E26] group-hover:bg-[#1A2E26] group-hover:text-white transition-colors duration-500">
                     <Microscope size={20} />
@@ -631,7 +650,7 @@ onClick={() =>
 
       {/* MODALE DETAILS HISTORIQUE */}
       {historyActions && (
-        <div className="fixed inset-0 z-50 bg-[#0A261D]/60 backdrop-blur-xl flex items-end sm:items-center justify-center p-4">
+        <div className="fixed inset-0 z-[600] bg-[#0A261D]/60 backdrop-blur-xl flex items-end sm:items-center justify-center p-4">
           <div className="bg-white w-full max-w-lg rounded-[3.5rem] overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-500">
               <div className="relative p-8 bg-[#1A2E26] text-white">
                 <button onClick={() => setHistoryActions(null)} className="absolute top-6 right-6 w-10 h-10 rounded-2xl bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all">
@@ -691,9 +710,9 @@ onClick={() =>
         </div>
       )}
 
-      {/* MODALE SUPPRESSION (INFO MODAL) */}
+      {/* MODALE SUPPRESSION */}
       {diagToDelete && (
-        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center">
+        <div className="fixed inset-0 z-[700] bg-black/50 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-red-100 text-red-700 flex items-center justify-center">
@@ -719,7 +738,7 @@ onClick={() =>
 
       {/* ERREUR HORS LIGNE SUPPRESSION */}
       {offlineDeleteError && (
-        <div className="fixed inset-0 z-[60] bg-black/40 backdrop-blur-sm flex items-center justify-center">
+        <div className="fixed inset-0 z-[800] bg-black/40 backdrop-blur-sm flex items-center justify-center">
           <div className="bg-white rounded-[2rem] p-6 max-w-sm w-full mx-4 shadow-xl animate-in zoom-in">
             <div className="flex items-center gap-3 mb-4">
               <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center">
