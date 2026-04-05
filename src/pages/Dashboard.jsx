@@ -9,6 +9,7 @@ import { db } from '../lib/db';
 
 export default function Dashboard({
   user,
+  profile,
   parcelles = [],
   zoneCultures = [],
   setStep,
@@ -183,7 +184,9 @@ export default function Dashboard({
                             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-amber-400/80">{weather.city}</span>
                         </div>
                         <h1 className="text-3xl font-serif font-medium tracking-tight">Dalal ak jamm, <br/>
-                        <span className="italic font-bold text-white capitalize">{user?.user_metadata?.nom || user?.email?.split('@')[0]}</span>
+                        <span className="italic font-bold text-white capitalize">
+                          {profile?.nom || user?.user_metadata?.nom || user?.email?.split('@')[0]}
+                        </span>
                         </h1>
                     </div>
                     <div className="flex flex-col items-center bg-white/10 backdrop-blur-xl p-4 rounded-[2.5rem] border border-white/20 min-w-[90px]">
